@@ -1,0 +1,22 @@
+name: Rahul AI - Agent 01
+
+on:
+  workflow_dispatch:
+
+jobs:
+  xauusd-intelligence:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get Rahul AI Team
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run XAUUSD Intelligence Agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python agent01.py
