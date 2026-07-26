@@ -3,21 +3,6 @@ import json
 import urllib.request
 
 API_KEY = os.environ["GEMINI_API_KEY"]
-models_url = (
-    "https://generativelanguage.googleapis.com/v1beta/models"
-    f"?key={API_KEY}"
-)
-
-with urllib.request.urlopen(models_url) as response:
-    models_data = json.loads(response.read().decode("utf-8"))
-
-print("\nAVAILABLE GEMINI MODELS:")
-for model in models_data.get("models", []):
-    methods = model.get("supportedGenerationMethods", [])
-    if "generateContent" in methods:
-        print(model["name"])
-
-raise SystemExit("Diagnostic complete")
 
 # For our first test we provide the information manually.
 # Next version will collect live information automatically.
@@ -57,7 +42,7 @@ Do not invent economic events that are not in the supplied information.
 
 url = (
     "https://generativelanguage.googleapis.com/v1beta/"
-    "models/gemini-2.5-flash:generateContent"
+    "models/gemini-flash-latest:generateContent"
     f"?key={API_KEY}"
 )
 
