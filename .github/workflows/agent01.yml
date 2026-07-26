@@ -2,9 +2,7 @@ name: Rahul AI - Agent 01
 
 on:
   workflow_dispatch: {}
-  push:
-    branches:
-      - main 
+  
 
 jobs:
   xauusd-intelligence:
