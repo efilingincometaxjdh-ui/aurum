@@ -1,21 +1,21 @@
 import os
 import json
 import urllib.request
-from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
 
-
-# =========================================================
+# ============================================================
 # RAHUL AI TEAM
-# AGENT 01 — XAUUSD INTELLIGENCE
-# =========================================================
+# AGENT 01 — XAUUSD MACRO INTELLIGENCE
+# VERSION 2.0
+# ============================================================
 
 API_KEY = os.environ["GEMINI_API_KEY"]
 
-
-# =========================================================
+# ============================================================
 # 1. LIVE INFORMATION SOURCES
-# =========================================================
+# ============================================================
 
 FEEDS = {
     "FED_MONETARY_POLICY":
@@ -24,115 +24,159 @@ FEEDS = {
     "FED_SPEECHES":
         "https://www.federalreserve.gov/feeds/speeches.xml",
 
-    "BLS_LATEST":
-        "https://www.bls.gov/feed/bls_latest.rss",
+    "FED_PRESS_RELEASES":
+        "https://www.federalreserve.gov/feeds/press_all.xml",
 }
 
+# Only recent information should influence trading intelligence
+MAX_AGE_DAYS = 7
 
 KEYWORDS = [
     "federal reserve",
+    "fed",
     "fomc",
+    "powell",
     "monetary policy",
     "interest rate",
     "rates",
     "inflation",
-    "consumer price",
     "cpi",
-    "producer price",
     "ppi",
     "employment",
     "unemployment",
     "payroll",
     "jobs",
     "wages",
-    "jolts",
+    "treasury",
+    "yield",
+    "economic",
+    "economy",
+    "dollar",
+    "usd",
 ]
 
 
-# =========================================================
-# 2. READ + FILTER FEEDS
-# =========================================================
+# ============================================================
+# 2. RSS READER
+# ============================================================
+
+def clean_text(value):
+    if value is None:
+        return ""
+
+    return " ".join(value.split())
+
+
+def parse_date(value):
+    if not value:
+        return None
+
+    try:
+        dt = parsedate_to_datetime(value)
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        return dt.astimezone(timezone.utc)
+
+    except Exception:
+        return None
+
 
 def read_feed(source, url):
 
-    try:
+    items = []
 
-        request = Request(
+    try:
+        request = urllib.request.Request(
             url,
             headers={
                 "User-Agent":
-                    "Mozilla/5.0 Rahul-AI-Team/1.0"
-            },
+                    "Mozilla/5.0 Rahul-AI-Team-XAUUSD-Agent/2.0"
+            }
         )
 
-        with urlopen(request, timeout=15) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=20
+        ) as response:
+
             xml_data = response.read()
 
         root = ET.fromstring(xml_data)
 
-        items = []
+        # Supports both RSS and Atom-style entries
+        entries = (
+            root.findall(".//item")
+            + root.findall(".//{http://www.w3.org/2005/Atom}entry")
+        )
 
-        # RSS feeds
-        for item in root.findall(".//item"):
+        now = datetime.now(timezone.utc)
 
-            title = item.findtext("title", "").strip()
-            link = item.findtext("link", "").strip()
-            date = item.findtext("pubDate", "").strip()
+        for entry in entries:
 
-            if any(
-                keyword in title.lower()
+            def get_value(names):
+
+                for name in names:
+
+                    node = entry.find(name)
+
+                    if node is not None and node.text:
+                        return clean_text(node.text)
+
+                return ""
+
+            title = get_value([
+                "title",
+                "{http://www.w3.org/2005/Atom}title"
+            ])
+
+            description = get_value([
+                "description",
+                "summary",
+                "{http://www.w3.org/2005/Atom}summary",
+                "{http://www.w3.org/2005/Atom}content"
+            ])
+
+            date_text = get_value([
+                "pubDate",
+                "updated",
+                "published",
+                "{http://www.w3.org/2005/Atom}updated",
+                "{http://www.w3.org/2005/Atom}published"
+            ])
+
+            published = parse_date(date_text)
+
+            combined = (
+                title + " " + description
+            ).lower()
+
+            # Ignore unrelated items
+            if not any(
+                keyword in combined
                 for keyword in KEYWORDS
             ):
-                items.append({
-                    "source": source,
-                    "title": title,
-                    "date": date,
-                    "url": link,
-                })
+                continue
 
+            # Ignore stale information
+            if published:
 
-        # Atom feeds
-        ns = {
-            "atom":
-                "http://www.w3.org/2005/Atom"
-        }
+                age = now - published
 
-        for entry in root.findall(
-            ".//atom:entry", ns
-        ):
+                if age > timedelta(days=MAX_AGE_DAYS):
+                    continue
 
-            title = entry.findtext(
-                "atom:title", "", ns
-            ).strip()
-
-            date = entry.findtext(
-                "atom:updated", "", ns
-            ).strip()
-
-            link_element = entry.find(
-                "atom:link", ns
-            )
-
-            link = ""
-
-            if link_element is not None:
-                link = link_element.attrib.get(
-                    "href", ""
+            items.append({
+                "source": source,
+                "title": title,
+                "description": description[:1200],
+                "published": (
+                    published.isoformat()
+                    if published
+                    else "UNKNOWN"
                 )
-
-            if any(
-                keyword in title.lower()
-                for keyword in KEYWORDS
-            ):
-                items.append({
-                    "source": source,
-                    "title": title,
-                    "date": date,
-                    "url": link,
-                })
-
-        return items[:10]
-
+            })
 
     except Exception as error:
 
@@ -141,131 +185,204 @@ def read_feed(source, url):
             f"{error}"
         )
 
-        return []
+    return items
 
 
-# =========================================================
-# 3. COLLECT INFORMATION
-# =========================================================
+# ============================================================
+# 3. COLLECT LIVE INFORMATION
+# ============================================================
 
 news = []
 
 for source, feed_url in FEEDS.items():
 
-    collected_items = read_feed(
+    collected = read_feed(
         source,
         feed_url
     )
 
-    news.extend(collected_items)
+    news.extend(collected)
 
+
+# Remove duplicate titles
+
+unique_news = []
+seen_titles = set()
+
+for item in news:
+
+    title_key = item["title"].lower().strip()
+
+    if title_key and title_key not in seen_titles:
+
+        seen_titles.add(title_key)
+        unique_news.append(item)
+
+
+news = unique_news
 
 print(
     f"\nCollected {len(news)} "
-    f"relevant macro items."
+    f"relevant recent macro items."
 )
 
 
-# =========================================================
+# ============================================================
 # 4. BUILD MARKET INFORMATION
-# =========================================================
+# ============================================================
 
-if not news:
+if news:
 
-    market_information = """
-No relevant current macroeconomic headlines
-were successfully collected.
+    sections = []
 
-There is insufficient evidence to establish
-a directional macro bias.
+    for item in news[:20]:
 
-Do not invent missing market information.
+        sections.append(
+            f"""
+SOURCE: {item['source']}
+PUBLISHED: {item['published']}
+TITLE: {item['title']}
+DETAILS: {item['description']}
 """
+        )
+
+    market_information = "\n".join(sections)
 
 else:
 
-    market_information = "\n\n".join(
+    market_information = """
+No sufficiently recent relevant Federal Reserve
+macroeconomic information was collected.
 
-        f"""
-SOURCE: {item['source']}
-DATE: {item['date']}
-HEADLINE: {item['title']}
-URL: {item['url']}
+Do not infer a directional trading bias from
+missing information.
 """
 
-        for item in news[:20]
-    )
 
-
-# =========================================================
-# 5. GEMINI ANALYST
-# =========================================================
+# ============================================================
+# 5. GEMINI INTELLIGENCE PROMPT
+# ============================================================
 
 prompt = f"""
 You are Agent 01 of Rahul AI Team.
 
-You are an XAUUSD macro intelligence analyst.
+ROLE:
+You are a macroeconomic intelligence agent supporting
+an automated XAUUSD trading system.
 
-Your job is to assess ONLY the information
-provided below and determine its potential
-implications for Gold versus the US Dollar.
+You do NOT execute trades.
+
+Your responsibility is to determine whether CURRENT
+macroeconomic information supports:
+
+1. Gold strength or weakness
+2. US Dollar strength or weakness
+3. Elevated event/news risk
+4. Whether automated XAUUSD trading should be allowed
 
 IMPORTANT RULES:
 
-1. Do not invent economic data.
-2. Do not invent current market prices.
-3. Do not assume that an old headline
-   describes current market conditions.
-4. If evidence is insufficient or conflicting,
-   return NEUTRAL.
-5. A headline merely mentioning inflation,
-   employment or the Federal Reserve does not
-   automatically imply a directional bias.
-6. Do not recommend BUY or SELL.
-7. Separate USD implications from Gold
-   implications.
-8. Be conservative with confidence.
+- Use ONLY the information supplied below.
+- Never invent economic numbers.
+- Never assume CPI, NFP, Fed decisions or market prices.
+- Old or ambiguous information must receive low weight.
+- Speech announcements without substantive policy
+  information must receive low weight.
+- If evidence is weak, return NEUTRAL.
+- High confidence requires multiple pieces of
+  consistent evidence.
+- Distinguish news risk from directional bias.
+- A high-risk environment does NOT automatically mean
+  bullish or bearish Gold.
 
-MARKET INFORMATION:
+GENERAL MACRO RELATIONSHIPS:
+
+Hawkish Fed / higher-rate pressure / stronger USD:
+usually negative for Gold.
+
+Dovish Fed / lower-rate expectations / weaker USD:
+usually supportive for Gold.
+
+Higher inflation can support Gold, but persistent
+inflation can also strengthen USD if it increases
+expectations of tighter Federal Reserve policy.
+
+Risk-off/geopolitical stress may support Gold,
+but do not assume this unless evidence is supplied.
+
+SCORING:
+
+Gold Score:
+-100 = extremely bearish Gold
+0 = neutral
++100 = extremely bullish Gold
+
+USD Score:
+-100 = extremely bearish USD
+0 = neutral
++100 = extremely bullish USD
+
+BOT ACTION:
+
+Return exactly ONE of:
+
+ALLOW_BUYS
+ALLOW_SELLS
+ALLOW_BOTH
+CAUTION
+BLOCK_TRADING
+
+Use BLOCK_TRADING when major uncertainty/event risk
+makes automated entry dangerous.
+
+Use CAUTION when information is insufficient or
+conflicting.
+
+Use ALLOW_BUYS only when evidence meaningfully
+supports Gold strength.
+
+Use ALLOW_SELLS only when evidence meaningfully
+supports Gold weakness.
+
+Use ALLOW_BOTH only when macro conditions are
+relatively stable and there is no meaningful
+directional restriction.
+
+LIVE INFORMATION:
 
 {market_information}
 
-Return ONLY valid JSON using exactly
-this structure:
+Return ONLY valid JSON.
+
+Required structure:
 
 {{
-  "gold_bias": "BULLISH, BEARISH or NEUTRAL",
-  "usd_bias": "BULLISH, BEARISH or NEUTRAL",
+  "gold_bias": "BULLISH|BEARISH|NEUTRAL",
+  "usd_bias": "BULLISH|BEARISH|NEUTRAL",
   "gold_score": 0,
   "usd_score": 0,
-  "news_risk": "LOW, MEDIUM or HIGH",
+  "news_risk": "LOW|MEDIUM|HIGH|EXTREME",
   "confidence": 0,
-  "reason": "short evidence-based explanation",
-  "invalidation": "what evidence could change the assessment"
+  "bot_action": "ALLOW_BUYS|ALLOW_SELLS|ALLOW_BOTH|CAUTION|BLOCK_TRADING",
+  "reason": "short explanation",
+  "invalidation": "what would invalidate this assessment"
 }}
-
-gold_score and usd_score must be integers
-between -100 and 100.
-
-confidence must be an integer between
-0 and 100.
 """
 
 
-# =========================================================
+# ============================================================
 # 6. CALL GEMINI
-# =========================================================
+# ============================================================
+
+MODEL = "gemini-2.5-flash"
 
 url = (
     "https://generativelanguage.googleapis.com/"
-    "v1beta/models/"
-    "gemini-flash-latest:generateContent"
+    f"v1beta/models/{MODEL}:generateContent"
     f"?key={API_KEY}"
 )
 
-
-data = {
-
+payload = {
     "contents": [
         {
             "parts": [
@@ -275,107 +392,223 @@ data = {
             ]
         }
     ],
-
     "generationConfig": {
-        "responseMimeType":
-            "application/json"
+        "temperature": 0.1,
+        "responseMimeType": "application/json"
     }
 }
 
+data = json.dumps(payload).encode("utf-8")
 
 request = urllib.request.Request(
-
     url,
-
-    data=json.dumps(data).encode(
-        "utf-8"
-    ),
-
+    data=data,
     headers={
-        "Content-Type":
-            "application/json"
+        "Content-Type": "application/json"
     },
+    method="POST"
 )
 
 
-with urllib.request.urlopen(
-    request,
-    timeout=30
-) as response:
+# ============================================================
+# 7. READ GEMINI RESPONSE
+# ============================================================
 
-    result = json.loads(
-        response.read().decode("utf-8")
+try:
+
+    with urllib.request.urlopen(
+        request,
+        timeout=60
+    ) as response:
+
+        result = json.loads(
+            response.read().decode("utf-8")
+        )
+
+    text = (
+        result["candidates"][0]
+        ["content"]["parts"][0]["text"]
     )
 
+    analysis = json.loads(text)
 
-text = (
-    result["candidates"][0]
-    ["content"]["parts"][0]["text"]
+except Exception as error:
+
+    print(
+        "\nAgent 01 Gemini analysis failed:"
+    )
+
+    print(error)
+
+    raise
+
+
+# ============================================================
+# 8. VALIDATE OUTPUT
+# ============================================================
+
+def safe_score(value):
+
+    try:
+        value = int(value)
+
+    except Exception:
+        return 0
+
+    return max(-100, min(100, value))
+
+
+def safe_confidence(value):
+
+    try:
+        value = int(value)
+
+    except Exception:
+        return 0
+
+    return max(0, min(100, value))
+
+
+gold_bias = analysis.get(
+    "gold_bias",
+    "NEUTRAL"
+).upper()
+
+usd_bias = analysis.get(
+    "usd_bias",
+    "NEUTRAL"
+).upper()
+
+gold_score = safe_score(
+    analysis.get("gold_score", 0)
+)
+
+usd_score = safe_score(
+    analysis.get("usd_score", 0)
+)
+
+news_risk = analysis.get(
+    "news_risk",
+    "HIGH"
+).upper()
+
+confidence = safe_confidence(
+    analysis.get("confidence", 0)
+)
+
+bot_action = analysis.get(
+    "bot_action",
+    "CAUTION"
+).upper()
+
+reason = analysis.get(
+    "reason",
+    "No explanation provided."
+)
+
+invalidation = analysis.get(
+    "invalidation",
+    "No invalidation provided."
 )
 
 
-analysis = json.loads(text)
+# Safety validation
+
+VALID_BIASES = {
+    "BULLISH",
+    "BEARISH",
+    "NEUTRAL"
+}
+
+VALID_RISK = {
+    "LOW",
+    "MEDIUM",
+    "HIGH",
+    "EXTREME"
+}
+
+VALID_ACTIONS = {
+    "ALLOW_BUYS",
+    "ALLOW_SELLS",
+    "ALLOW_BOTH",
+    "CAUTION",
+    "BLOCK_TRADING"
+}
 
 
-# =========================================================
-# 7. DISPLAY REPORT
-# =========================================================
+if gold_bias not in VALID_BIASES:
+    gold_bias = "NEUTRAL"
 
-print("\n🤖 RAHUL AI TEAM")
+if usd_bias not in VALID_BIASES:
+    usd_bias = "NEUTRAL"
 
-print("=" * 45)
+if news_risk not in VALID_RISK:
+    news_risk = "HIGH"
+
+if bot_action not in VALID_ACTIONS:
+    bot_action = "CAUTION"
+
+
+# ============================================================
+# 9. DISPLAY AGENT 01 INTELLIGENCE
+# ============================================================
+
+print("\n")
+print("🤖 RAHUL AI TEAM")
+print("=" * 55)
 
 print(
-    "AGENT 01 — XAUUSD INTELLIGENCE"
+    "AGENT 01 — XAUUSD MACRO INTELLIGENCE v2"
 )
 
-print("=" * 45)
+print("=" * 55)
 
+print()
 
 print(
-    f"\n🥇 Gold Bias:    "
-    f"{analysis['gold_bias']}"
+    f"🥇 Gold Bias:      {gold_bias}"
 )
 
 print(
-    f"💵 USD Bias:     "
-    f"{analysis['usd_bias']}"
+    f"💵 USD Bias:       {usd_bias}"
 )
 
 print(
-    f"📊 Gold Score:   "
-    f"{analysis['gold_score']}/100"
+    f"📊 Gold Score:     {gold_score:+d}/100"
 )
 
 print(
-    f"📊 USD Score:    "
-    f"{analysis['usd_score']}/100"
+    f"📊 USD Score:      {usd_score:+d}/100"
 )
 
 print(
-    f"⚠️ News Risk:    "
-    f"{analysis['news_risk']}"
+    f"⚠️ News Risk:      {news_risk}"
 )
 
 print(
-    f"🧠 Confidence:   "
-    f"{analysis['confidence']}%"
+    f"🧠 Confidence:     {confidence}%"
 )
 
+print()
 
 print(
-    f"\nReason:\n"
-    f"{analysis['reason']}"
+    f"🤖 BOT ACTION:     {bot_action}"
 )
 
+print()
+
+print("Reason:")
+print(reason)
+
+print()
+
+print("Invalidation:")
+print(invalidation)
+
+print()
+
+print("=" * 55)
+
 print(
-    f"\nInvalidation:\n"
-    f"{analysis['invalidation']}"
-)
-
-
-print("\n" + "=" * 45)
-
-print(
-    "Agent 01 analysis complete."
+    "Agent 01 live macro analysis complete."
 )
