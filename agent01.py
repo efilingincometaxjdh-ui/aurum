@@ -374,7 +374,7 @@ Required structure:
 # 6. CALL GEMINI
 # ============================================================
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-3.5-flash"
 
 url = (
     "https://generativelanguage.googleapis.com/"
