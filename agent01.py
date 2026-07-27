@@ -5,10 +5,23 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 
+from config.settings import (
+    ARTICLE_MAX_LENGTH,
+    MAX_ARTICLES_PER_REQUEST,
+    GEMINI_MODEL,
+    GEMINI_TEMPERATURE,
+    GEMINI_TIMEOUT,
+    MAX_AGE_DAYS,
+    ITEMS_PER_FEED_ANALYSIS,
+    STATE_FILE_PATH,
+)
+from collectors.article_reader import extract_article_content
+from intelligence.risk_engine import RiskEngine
+
 # ============================================================
 # RAHUL AI TEAM
 # AGENT 01 — XAUUSD MACRO INTELLIGENCE
-# VERSION 2.0
+# VERSION 3.0
 # ============================================================
 
 API_KEY = os.environ["GEMINI_API_KEY"]
@@ -27,9 +40,6 @@ FEEDS = {
     "FED_PRESS_RELEASES":
         "https://www.federalreserve.gov/feeds/press_all.xml",
 }
-
-# Only recent information should influence trading intelligence
-MAX_AGE_DAYS = 7
 
 KEYWORDS = [
     "federal reserve",
@@ -90,7 +100,7 @@ def read_feed(source, url):
         request = urllib.request.Request(
             url,
             headers={
-                "User-Agent": "Mozilla/5.0 Rahul-AI-Team-XAUUSD-Agent/2.0"
+                "User-Agent": "Mozilla/5.0 Rahul-AI-Team-XAUUSD-Agent/3.0"
             }
         )
 
@@ -172,7 +182,8 @@ def read_feed(source, url):
                     if published
                     else "UNKNOWN"
                 ),
-                "link": link
+                "link": link,
+                "article_text": ""  # Will populate in Section 4
             })
 
         print(
@@ -227,21 +238,51 @@ print(
 
 
 # ============================================================
-# 4. BUILD MARKET INFORMATION
+# 4. FETCH ARTICLE CONTENT
+# ============================================================
+
+print("\nFetching article content from trusted sources...")
+
+articles_fetched = 0
+articles_with_content = 0
+
+for idx, item in enumerate(news):
+    if articles_fetched >= MAX_ARTICLES_PER_REQUEST:
+        break
+    
+    if item["link"]:
+        success, article_text = extract_article_content(item["link"])
+        
+        if success and article_text:
+            item["article_text"] = article_text
+            articles_fetched += 1
+            articles_with_content += 1
+
+print(
+    f"Successfully fetched {articles_fetched} full articles "
+    f"({articles_with_content} with substantial content)"
+)
+
+
+# ============================================================
+# 5. BUILD MARKET INFORMATION
 # ============================================================
 
 if news:
 
     sections = []
 
-    for item in news[:20]:
+    for item in news[:ITEMS_PER_FEED_ANALYSIS]:
+
+        # Prefer article content if available, fall back to description
+        details = item["article_text"] if item["article_text"] else item["description"]
 
         sections.append(
             f"""
 SOURCE: {item['source']}
 PUBLISHED: {item['published']}
 TITLE: {item['title']}
-DETAILS: {item['description']}
+DETAILS: {details}
 """
         )
 
@@ -259,25 +300,25 @@ missing information.
 
 
 # ============================================================
-# 5. GEMINI INTELLIGENCE PROMPT
+# 6. GEMINI INTELLIGENCE PROMPT
 # ============================================================
 
 prompt = f"""
 You are Agent 01 of Rahul AI Team.
 
 ROLE:
-You are a macroeconomic intelligence agent supporting
+You are a macroeconomic intelligence analyst supporting
 an automated XAUUSD trading system.
 
-You do NOT execute trades.
+You do NOT decide whether trades are executed.
+You do NOT have authority over trading permissions.
 
-Your responsibility is to determine whether CURRENT
-macroeconomic information supports:
+Your responsibility is to analyze CURRENT macroeconomic
+information and return structured intelligence on:
 
 1. Gold strength or weakness
 2. US Dollar strength or weakness
 3. Elevated event/news risk
-4. Whether automated XAUUSD trading should be allowed
 
 IMPORTANT RULES:
 
@@ -321,31 +362,14 @@ USD Score:
 0 = neutral
 +100 = extremely bullish USD
 
-BOT ACTION:
+Confidence:
+0-100: How confident are you in this analysis?
 
-Return exactly ONE of:
-
-ALLOW_BUYS
-ALLOW_SELLS
-ALLOW_BOTH
-CAUTION
-BLOCK_TRADING
-
-Use BLOCK_TRADING when major uncertainty/event risk
-makes automated entry dangerous.
-
-Use CAUTION when information is insufficient or
-conflicting.
-
-Use ALLOW_BUYS only when evidence meaningfully
-supports Gold strength.
-
-Use ALLOW_SELLS only when evidence meaningfully
-supports Gold weakness.
-
-Use ALLOW_BOTH only when macro conditions are
-relatively stable and there is no meaningful
-directional restriction.
+News Risk:
+LOW = routine updates, no event risk
+MEDIUM = scheduled releases or minor Fed communications
+HIGH = important economic data or policy announcements
+EXTREME = FOMC decisions, major policy shifts, crisis events
 
 LIVE INFORMATION:
 
@@ -358,11 +382,10 @@ Required structure:
 {{
   "gold_bias": "BULLISH|BEARISH|NEUTRAL",
   "usd_bias": "BULLISH|BEARISH|NEUTRAL",
-  "gold_score": 0,
-  "usd_score": 0,
+  "gold_score": -100 to +100,
+  "usd_score": -100 to +100,
   "news_risk": "LOW|MEDIUM|HIGH|EXTREME",
-  "confidence": 0,
-  "bot_action": "ALLOW_BUYS|ALLOW_SELLS|ALLOW_BOTH|CAUTION|BLOCK_TRADING",
+  "confidence": 0 to 100,
   "reason": "short explanation",
   "invalidation": "what would invalidate this assessment"
 }}
@@ -370,14 +393,12 @@ Required structure:
 
 
 # ============================================================
-# 6. CALL GEMINI
+# 7. CALL GEMINI
 # ============================================================
-
-MODEL = "gemini-3.5-flash"
 
 url = (
     "https://generativelanguage.googleapis.com/"
-    f"v1beta/models/{MODEL}:generateContent"
+    f"v1beta/models/{GEMINI_MODEL}:generateContent"
     f"?key={API_KEY}"
 )
 
@@ -392,7 +413,7 @@ payload = {
         }
     ],
     "generationConfig": {
-        "temperature": 0.1,
+        "temperature": GEMINI_TEMPERATURE,
         "responseMimeType": "application/json"
     }
 }
@@ -410,14 +431,14 @@ request = urllib.request.Request(
 
 
 # ============================================================
-# 7. READ GEMINI RESPONSE
+# 8. READ GEMINI RESPONSE
 # ============================================================
 
 try:
 
     with urllib.request.urlopen(
         request,
-        timeout=60
+        timeout=GEMINI_TIMEOUT
     ) as response:
 
         result = json.loads(
@@ -443,7 +464,7 @@ except Exception as error:
 
 
 # ============================================================
-# 8. VALIDATE OUTPUT
+# 9. VALIDATE GEMINI OUTPUT
 # ============================================================
 
 def safe_score(value):
@@ -495,11 +516,6 @@ confidence = safe_confidence(
     analysis.get("confidence", 0)
 )
 
-bot_action = analysis.get(
-    "bot_action",
-    "CAUTION"
-).upper()
-
 reason = analysis.get(
     "reason",
     "No explanation provided."
@@ -526,14 +542,6 @@ VALID_RISK = {
     "EXTREME"
 }
 
-VALID_ACTIONS = {
-    "ALLOW_BUYS",
-    "ALLOW_SELLS",
-    "ALLOW_BOTH",
-    "CAUTION",
-    "BLOCK_TRADING"
-}
-
 
 if gold_bias not in VALID_BIASES:
     gold_bias = "NEUTRAL"
@@ -544,59 +552,140 @@ if usd_bias not in VALID_BIASES:
 if news_risk not in VALID_RISK:
     news_risk = "HIGH"
 
-if bot_action not in VALID_ACTIONS:
-    bot_action = "CAUTION"
+
+# ============================================================
+# 10. SET MAJOR EVENT (DETERMINISTIC, NOT FROM GEMINI)
+# ============================================================
+
+# major_event_detected is set deterministically in Python.
+# In future versions, this will come from Economic Calendar module.
+# For now, always False.
+
+major_event_detected = False
 
 
 # ============================================================
-# 9. DISPLAY AGENT 01 INTELLIGENCE
+# 11. DETERMINISTIC RISK ENGINE — FINAL BOT ACTION
+# ============================================================
+
+engine = RiskEngine({
+    "gold_bias": gold_bias,
+    "usd_bias": usd_bias,
+    "gold_score": gold_score,
+    "usd_score": usd_score,
+    "news_risk": news_risk,
+    "confidence": confidence,
+    "major_event_detected": major_event_detected,
+})
+
+bot_action, engine_rationale = engine.evaluate()
+
+
+# ============================================================
+# 12. GENERATE JSON STATE FILE
+# ============================================================
+
+# Create timestamps
+now_utc = datetime.now(timezone.utc)
+ist_offset = timedelta(hours=5, minutes=30)
+now_ist = now_utc + ist_offset
+
+# Build state object
+state = {
+    "generated_at_utc": now_utc.isoformat() + "Z",
+    "generated_at_ist": now_ist.isoformat() + "Z",
+    "agent": "agent01",
+    "version": "3.0",
+    "symbol": "XAUUSD",
+
+    "gold_bias": gold_bias,
+    "usd_bias": usd_bias,
+
+    "gold_score": gold_score,
+    "usd_score": usd_score,
+
+    "news_risk": news_risk,
+    "confidence": confidence,
+    "major_event_detected": major_event_detected,
+
+    "bot_action": bot_action,
+
+    "summary": reason,
+    "invalidation": invalidation,
+
+    "sources_used": [
+        {
+            "source": item["source"],
+            "title": item["title"],
+            "published": item["published"],
+            "link": item["link"],
+            "has_article_content": bool(item["article_text"])
+        }
+        for item in news[:ITEMS_PER_FEED_ANALYSIS]
+    ]
+}
+
+# Create data directory if needed
+os.makedirs(os.path.dirname(STATE_FILE_PATH) or ".", exist_ok=True)
+
+# Write state file
+with open(STATE_FILE_PATH, "w") as f:
+    json.dump(state, f, indent=2)
+
+print(f"\n✅ State file written to {STATE_FILE_PATH}")
+
+
+# ============================================================
+# 13. DISPLAY AGENT 01 INTELLIGENCE
 # ============================================================
 
 print("\n")
 print("🤖 RAHUL AI TEAM")
-print("=" * 55)
+print("=" * 65)
 
 print(
-    "AGENT 01 — XAUUSD MACRO INTELLIGENCE v2"
+    "AGENT 01 — XAUUSD MACRO INTELLIGENCE v3.0"
 )
 
-print("=" * 55)
+print("=" * 65)
 
 print()
 
-print(
-    f"🥇 Gold Bias:      {gold_bias}"
-)
-
-print(
-    f"💵 USD Bias:       {usd_bias}"
-)
-
-print(
-    f"📊 Gold Score:     {gold_score:+d}/100"
-)
-
-print(
-    f"📊 USD Score:      {usd_score:+d}/100"
-)
-
-print(
-    f"⚠️ News Risk:      {news_risk}"
-)
-
-print(
-    f"🧠 Confidence:     {confidence}%"
-)
+print("📊 DATA COLLECTION:")
+print(f"   Sources checked:      {len(FEEDS)}")
+print(f"   Items collected:      {len(news)}")
+print(f"   Articles fetched:     {articles_fetched}/{MAX_ARTICLES_PER_REQUEST}")
+print(f"   Articles with content: {articles_with_content}")
 
 print()
 
-print(
-    f"🤖 BOT ACTION:     {bot_action}"
-)
+print("🔍 MACRO SIGNALS:")
+print(f"   🥇 Gold Bias:         {gold_bias}")
+print(f"   💵 USD Bias:          {usd_bias}")
+print(f"   📊 Gold Score:        {gold_score:+d}/100")
+print(f"   📊 USD Score:         {usd_score:+d}/100")
 
 print()
 
-print("Reason:")
+print("⚠️  RISK ASSESSMENT:")
+print(f"   News Risk:            {news_risk}")
+print(f"   Major Event:          {'YES' if major_event_detected else 'NO'}")
+print(f"   Confidence:           {confidence}%")
+
+print()
+
+print("=" * 65)
+print(f"🤖 BOT ACTION: {bot_action}")
+print("=" * 65)
+
+print()
+
+print("Risk Engine Rationale:")
+print(engine_rationale)
+
+print()
+
+print("Gemini Analysis:")
 print(reason)
 
 print()
@@ -606,8 +695,13 @@ print(invalidation)
 
 print()
 
-print("=" * 55)
+print(f"Generated UTC:  {now_utc.isoformat()}Z")
+print(f"Generated IST:  {now_ist.isoformat()}Z")
 
-print(
-    "Agent 01 live macro analysis complete."
-)
+print()
+
+print("=" * 65)
+
+print("Agent 01 macro analysis complete.")
+
+print("=" * 65)
