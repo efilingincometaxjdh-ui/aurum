@@ -1,29 +1,61 @@
+"""
+Configuration settings for Rahul AI Team Agent 01 - XAUUSD Macro Intelligence.
+
+All values are architectural requirements for the agent's operation.
+"""
+
 # ============================================================
-# RAHUL AI TEAM — AGENT 01 CONFIGURATION
+# ARTICLE COLLECTION SETTINGS
 # ============================================================
 
-# Article Content Extraction
-ARTICLE_MAX_LENGTH = 10000  # Max characters to extract per article
-ARTICLE_FETCH_TIMEOUT = 10  # Timeout in seconds
-MAX_ARTICLES_PER_REQUEST = 5  # Max full articles to send to Gemini
+ARTICLE_MAX_LENGTH = 10000
+"""Maximum length of extracted article text in characters."""
 
-# RSS Feed Configuration
-MAX_AGE_DAYS = 7  # Only use items published within this many days
-ITEMS_PER_FEED_ANALYSIS = 20  # Max items to process per feed
+MAX_ARTICLES_PER_REQUEST = 5
+"""Maximum number of articles to fetch per agent run."""
 
-# Gemini Configuration
-GEMINI_MODEL = "gemini-3.5-flash"
-GEMINI_TEMPERATURE = 0.1
-GEMINI_TIMEOUT = 60
+ARTICLE_FETCH_TIMEOUT = 15
+"""Timeout in seconds for individual article fetches."""
 
-# Risk Engine Thresholds
-CONFIDENCE_THRESHOLD = 40  # Minimum confidence to allow directional trades
-STRONG_SCORE_THRESHOLD = 50  # Score magnitude required for ALLOW_BUYS/SELLS
-MODERATE_SCORE_THRESHOLD = 30  # Score magnitude for supporting evidence
+# ============================================================
+# FEED ANALYSIS SETTINGS
+# ============================================================
 
-# News Risk Controls
-NEWS_RISK_BLOCKS_TRADING = "EXTREME"  # Block trading if risk reaches this level
-HIGH_RISK_TRIGGERS_CAUTION = "HIGH"  # Caution if news risk is high
+ITEMS_PER_FEED_ANALYSIS = 5
+"""Maximum number of articles to include in Gemini analysis."""
 
-# Output Paths
-STATE_FILE_PATH = "data/latest_intelligence.json"
+MAX_AGE_DAYS = 7
+"""Maximum age of articles to consider (in days)."""
+
+# ============================================================
+# GEMINI API SETTINGS
+# ============================================================
+
+GEMINI_MODEL = "gemini-1.5-flash"
+"""Google Gemini model identifier."""
+
+GEMINI_TEMPERATURE = 0.3
+"""Gemini generation temperature (0.0 = deterministic, 1.0 = creative)."""
+
+GEMINI_TIMEOUT = 30
+"""Timeout in seconds for Gemini API requests."""
+
+# ============================================================
+# RISK ENGINE THRESHOLDS
+# ============================================================
+
+CONFIDENCE_THRESHOLD = 40
+"""Minimum confidence level (0-100) for directional permissions."""
+
+STRONG_SCORE_THRESHOLD = 50
+"""Minimum absolute score magnitude for strong directional signals."""
+
+# ============================================================
+# STATE AND LEARNING PATHS
+# ============================================================
+
+STATE_FILE_PATH = "data/agent01_state.json"
+"""Path where Agent 01 writes its JSON state output."""
+
+PREDICTIONS_JSONL_PATH = "data/learning/predictions.jsonl"
+"""Path to append-only JSONL file for prediction recording."""
