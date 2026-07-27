@@ -17,6 +17,7 @@ from config.settings import (
 )
 from collectors.article_reader import extract_article_content
 from intelligence.risk_engine import RiskEngine
+from learning.recorder import record_prediction
 
 # ============================================================
 # RAHUL AI TEAM
@@ -633,6 +634,17 @@ with open(STATE_FILE_PATH, "w") as f:
     json.dump(state, f, indent=2)
 
 print(f"\n✅ State file written to {STATE_FILE_PATH}")
+
+
+# ============================================================
+# 12.5 RECORD PREDICTION FOR LEARNING ARCHIVE
+# ============================================================
+
+try:
+    prediction_id = record_prediction(state)
+    print(f"✅ Prediction recorded: {prediction_id}")
+except Exception as error:
+    print(f"⚠️  Warning: Prediction recording failed: {error}")
 
 
 # ============================================================
