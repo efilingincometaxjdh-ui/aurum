@@ -84,94 +84,80 @@ def parse_date(value):
 
 
 def read_feed(source, url):
-
     items = []
 
     try:
         request = urllib.request.Request(
             url,
             headers={
-                "User-Agent":
-                    "Mozilla/5.0 Rahul-AI-Team-XAUUSD-Agent/2.0"
+                "User-Agent": "Mozilla/5.0 Rahul-AI-Team-XAUUSD-Agent/2.0"
             }
         )
 
-        with urllib.request.urlopen(
-            request,
-            timeout=20
-        ) as response:
-
+        with urllib.request.urlopen(request, timeout=20) as response:
             xml_data = response.read()
 
         root = ET.fromstring(xml_data)
-        print(f"\nDEBUG {source}")
-        print(f"Root tag: {root.tag}")
-        print(f"Total XML elements: {sum(1 for _ in root.iter())}")
 
-        for elem in list(root.iter())[:15]:
-            print(
-                f"TAG: {elem.tag} | "
-                f"TEXT: {(elem.text or '').strip()[:100]}"
-            )
-        
+        # Federal Reserve feeds use standard RSS <item> entries
+        entries = root.findall(".//item")
 
-        # Supports both RSS and Atom-style entries
-        entries = (
-            root.findall(".//item")
-            + root.findall(".//{http://www.w3.org/2005/Atom}entry")
-        )
+        print(f"\n{source}: Found {len(entries)} RSS entries")
 
         now = datetime.now(timezone.utc)
 
         for entry in entries:
 
-            def get_value(names):
+            title = clean_text(
+                entry.findtext("title", default="")
+            )
 
-                for name in names:
+            description = clean_text(
+                entry.findtext("description", default="")
+            )
 
-                    node = entry.find(name)
+            pub_date = clean_text(
+                entry.findtext("pubDate", default="")
+            )
 
-                    if node is not None and node.text:
-                        return clean_text(node.text)
+            link = clean_text(
+                entry.findtext("link", default="")
+            )
 
-                return ""
+            # Parse RSS publication date
+            published = None
 
-            title = get_value([
-                "title",
-                "{http://www.w3.org/2005/Atom}title"
-            ])
+            if pub_date:
+                try:
+                    published = parsedate_to_datetime(pub_date)
 
-            description = get_value([
-                "description",
-                "summary",
-                "{http://www.w3.org/2005/Atom}summary",
-                "{http://www.w3.org/2005/Atom}content"
-            ])
+                    if published.tzinfo is None:
+                        published = published.replace(
+                            tzinfo=timezone.utc
+                        )
 
-            date_text = get_value([
-                "pubDate",
-                "updated",
-                "published",
-                "{http://www.w3.org/2005/Atom}updated",
-                "{http://www.w3.org/2005/Atom}published"
-            ])
+                    published = published.astimezone(timezone.utc)
 
-            published = parse_date(date_text)
+                except Exception as error:
+                    print(
+                        f"Date parse warning: {pub_date} | {error}"
+                    )
 
             combined = (
                 title + " " + description
             ).lower()
 
-            # Ignore unrelated items
-            if not any(
+            # Keyword relevance
+            relevant = any(
                 keyword in combined
                 for keyword in KEYWORDS
-            ):
+            )
+
+            if not relevant:
                 continue
 
-            # Ignore stale information
+            # Freshness check
             if published:
-
                 age = now - published
 
                 if age > timedelta(days=MAX_AGE_DAYS):
@@ -185,14 +171,17 @@ def read_feed(source, url):
                     published.isoformat()
                     if published
                     else "UNKNOWN"
-                )
+                ),
+                "link": link
             })
 
-    except Exception as error:
-
         print(
-            f"Warning: {source} unavailable: "
-            f"{error}"
+            f"{source}: Accepted {len(items)} relevant recent items"
+        )
+
+    except Exception as error:
+        print(
+            f"Warning: {source} unavailable: {error}"
         )
 
     return items
