@@ -1,0 +1,22 @@
+name: Agent 02 - XAUUSD Market Intelligence
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-agent02:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Agent 02
+        env:
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: python agent02.py
