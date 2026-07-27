@@ -104,6 +104,13 @@ def read_feed(source, url):
             xml_data = response.read()
 
         root = ET.fromstring(xml_data)
+        print(f"\nDEBUG {source}")
+        print(f"Root tag: {root.tag}")
+        print(f"Total XML elements: {sum(1 for _ in root.iter())}")
+        
+        for elem in list(root.iter())[:15]:
+        print(f"TAG: {elem.tag} | TEXT: {(elem.text or '').strip()[:100]}")
+        
 
         # Supports both RSS and Atom-style entries
         entries = (
