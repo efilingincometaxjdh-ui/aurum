@@ -10,6 +10,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from market.indicators import calculate_indicators
+from market.structure import analyze_structure
 
 
 # ============================================================
@@ -201,6 +202,19 @@ def main():
             )
             indicator_results[timeframe] = None
 
+    structure_results = {}
+
+        for timeframe in available:
+            try:
+                structure_results[timeframe] = analyze_structure(
+                    market_data[timeframe]
+                )
+            except Exception as error:
+                print(
+                    f"⚠️ {timeframe}: "
+                    f"Structure analysis failed: {error}"
+                )
+                structure_results[timeframe] = None
     print()
     print("=" * 60)
     print("MARKET DATA STATUS")
@@ -263,7 +277,30 @@ def main():
         print(f"  RSI14 : {indicators['rsi14']:.2f}")
         print(f"  ADX14 : {indicators['adx14']:.2f}")
         print(f"  ATR14 : {indicators['atr14']:.2f}")
-    print("✅ Agent 02 Stage 2 indicator analysis complete.")
+    print()
+
+        print("=" * 60)
+        print("MARKET STRUCTURE")
+        print("=" * 60)
+        
+        for timeframe in available:
+        
+            structure = structure_results.get(timeframe)
+        
+            if not structure:
+                print(f"{timeframe}: structure unavailable")
+                continue
+        
+            print()
+            print(timeframe)
+            print(f"  Trend      : {structure['trend']}")
+            print(f"  Support    : {structure['support']:.2f}")
+            print(f"  Resistance : {structure['resistance']:.2f}")
+            print(f"  Swing High : {structure['swing_high']:.2f}")
+            print(f"  Swing Low  : {structure['swing_low']:.2f}")
+        
+        print()
+        print("✅ Agent 02 Stage 3 market structure analysis complete.")
 
 
 if __name__ == "__main__":
