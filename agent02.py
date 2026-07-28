@@ -187,7 +187,7 @@ def main():
     market_data = collect_market_data()
 
     available, missing = validate_market_data(market_data)
-        indicator_results = {}
+    indicator_results = {}
 
     for timeframe in available:
         try:
