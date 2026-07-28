@@ -1,1 +1,19 @@
+{
+    "agent":"DecisionEngine",
 
+    "version":"0.3",
+
+    "generated_at":"...",
+
+    "status":"SUCCESS",
+
+    "data":{
+
+        "decision":"BULLISH",
+
+        "confidence":76,
+
+        "reasons":[...]
+
+    }
+}
