@@ -9,6 +9,7 @@ import json
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from market.indicators import calculate_indicators
 
 
 # ============================================================
@@ -186,6 +187,19 @@ def main():
     market_data = collect_market_data()
 
     available, missing = validate_market_data(market_data)
+        indicator_results = {}
+
+    for timeframe in available:
+        try:
+            indicator_results[timeframe] = calculate_indicators(
+                market_data[timeframe]
+            )
+        except Exception as error:
+            print(
+                f"⚠️ {timeframe}: "
+                f"Indicator calculation failed: {error}"
+            )
+            indicator_results[timeframe] = None
 
     print()
     print("=" * 60)
@@ -229,8 +243,27 @@ def main():
             f"C {latest['close']:.2f}"
         )
 
-    print()
-    print("✅ Agent 02 Stage 1 market-data test complete.")
+        print()
+    print("=" * 60)
+    print("TECHNICAL MARKET STATE")
+    print("=" * 60)
+
+    for timeframe in available:
+
+        indicators = indicator_results.get(timeframe)
+
+        if not indicators:
+            print(f"{timeframe}: indicators unavailable")
+            continue
+
+        print()
+        print(f"{timeframe}")
+        print(f"  EMA20 : {indicators['ema20']:.2f}")
+        print(f"  EMA50 : {indicators['ema50']:.2f}")
+        print(f"  RSI14 : {indicators['rsi14']:.2f}")
+        print(f"  ADX14 : {indicators['adx14']:.2f}")
+        print(f"  ATR14 : {indicators['atr14']:.2f}")
+    print("✅ Agent 02 Stage 2 indicator analysis complete.")
 
 
 if __name__ == "__main__":
