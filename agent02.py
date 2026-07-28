@@ -11,6 +11,7 @@ import urllib.request
 from datetime import datetime, timezone
 from market.indicators import calculate_indicators
 from market.structure import analyze_structure
+from utils.json_writer import write_state
 
 
 # ============================================================
@@ -302,6 +303,31 @@ def main():
     print()
     print("✅ Agent 02 Stage 3 market structure analysis complete.")
 
+    market_state = {}
+    
+    for timeframe in available:
+    
+        indicators = indicator_results.get(timeframe)
+        structure = structure_results.get(timeframe)
+    
+        if not indicators or not structure:
+            continue
+    
+        market_state[timeframe] = {
+    
+            "ema20": indicators["ema20"],
+            "ema50": indicators["ema50"],
+            "rsi": indicators["rsi14"],
+            "adx": indicators["adx14"],
+            "atr": indicators["atr14"],
+    
+            "trend": structure["trend"],
+            "support": structure["support"],
+            "resistance": structure["resistance"],
+            "swing_high": structure["swing_high"],
+            "swing_low": structure["swing_low"]
+    
+        }
 
 if __name__ == "__main__":
     main()
