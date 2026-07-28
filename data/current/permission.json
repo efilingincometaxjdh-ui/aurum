@@ -1,1 +1,17 @@
+{
+    "agent":"PermissionEngine",
 
+    "version":"0.3",
+
+    "generated_at":"...",
+
+    "status":"SUCCESS",
+
+    "data":{
+
+        "permission":"ALLOW_BUYS",
+
+        "reason":"Bullish market"
+
+    }
+}
