@@ -1,1 +1,37 @@
+{
+    "agent":"Agent02",
+    "version":"0.3",
+    "generated_at":"...",
 
+    "status":"SUCCESS",
+
+    "data":{
+
+        "M5":{
+
+            "ema20":4048,
+
+            "ema50":4047,
+
+            "rsi":54,
+
+            "adx":26,
+
+            "trend":"Bullish"
+
+        },
+
+        "M15":{
+
+        },
+
+        "H1":{
+
+        },
+
+        "H4":{
+
+        }
+
+    }
+}
