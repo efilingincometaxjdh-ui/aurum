@@ -336,7 +336,7 @@ def main():
         data=market_state
     )
 
-print()
-print("✅ Agent02 state written to data/current/agent02.json")
+    print()
+    print("✅ Agent02 state written to data/current/agent02.json")
 if __name__ == "__main__":
     main()
