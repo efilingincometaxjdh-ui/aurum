@@ -1,7 +1,7 @@
 # Rahul AI Team — Project Log
 
 Last audited: 2026-07-30
-Branch: `phase2-outcome-integrity` (candidate; `main` remains stable)
+Branch: `main`
 Phase: **Phase 2 — evidence infrastructure**
 
 This file is the persistent source of truth for architecture, recovery evidence, current health, contracts, safety policy and next work.
@@ -68,7 +68,7 @@ It overlaps Agent 03 and contains a legacy bot-action path that conflicts with i
 - Freshness/risk/end-to-end HEAD `06d79b5d`: Tests #67 SUCCESS.
 - Deterministic V1 effective HEAD `8501a1d0`: Tests #75 SUCCESS; PR #5 merged.
 - Phase 2 historical observation HEAD `27f54dca`: Tests #86 SUCCESS; PR #6 merged.
-- Outcome-integrity candidate adds append-only outcome writer, observation/horizon idempotency, orphan rejection, timestamp/schema validation, finite-price validation and corrupt-JSONL fail-closed behavior. Await fresh CI evidence before integration.
+- Outcome-integrity HEAD `7289267b`: Tests #93 SUCCESS; PR #7 mergeable with no review comments and merged after evidence review.
 
 ## Contract snapshot
 
@@ -99,7 +99,7 @@ Agent 06 downstream:
 - always `execution_enabled: false`;
 - no autonomous execution capability.
 
-## Phase 2 historical evidence — MERGED BASE + OUTCOME-INTEGRITY CANDIDATE
+## Phase 2 historical evidence — MERGED
 
 PR #6 introduced the first append-only observation/outcome contract:
 - immutable prediction snapshots with deterministic observation IDs;
@@ -109,13 +109,13 @@ PR #6 introduced the first append-only observation/outcome contract:
 - invalid horizons and non-positive prices fail validation;
 - historical snapshots forcibly store `execution_enabled: false`, even if unsafe caller input claims otherwise.
 
-Outcome-integrity candidate now additionally:
-- appends outcomes without rewriting prediction history;
-- enforces one outcome per `(observation_id, horizon)`;
-- optionally rejects outcomes whose observation ID is absent from observation history;
-- validates timezone-aware ISO-8601 timestamps and schema version;
-- rejects NaN/infinite/non-positive prices;
-- fails closed rather than appending when existing JSONL is corrupt or structurally invalid.
+PR #7 hardened outcome integrity:
+- append-only outcome writer without rewriting prediction history;
+- one outcome per `(observation_id, horizon)`;
+- optional orphan-outcome rejection against observation history;
+- timezone-aware ISO-8601 timestamp and schema validation;
+- rejection of NaN/infinite/non-positive prices;
+- fail-closed behavior when existing JSONL is corrupt or structurally invalid.
 
 This layer still does **not** choose a live market-price provider, run continuous collection, calculate performance statistics, or create trading authority.
 
@@ -127,12 +127,12 @@ This layer still does **not** choose a live market-price provider, run continuou
 4. Operational orchestration must not accidentally become autonomous execution.
 5. Historical JSONL duplicate checks still scan existing records; adequate for initial evidence volume, but indexing should be hardened before large datasets.
 6. No validated live reference-price source has been selected for outcome measurement.
-7. Outcome timing currently validates timestamp syntax but does not yet enforce measured-at >= observation time plus the requested horizon; that requires joining observation metadata and is a candidate for the next integrity increment.
+7. Outcome timing validates timestamp syntax but does not yet enforce measured-at >= observation time plus the requested horizon; this requires joining observation metadata.
 
 ## Active Phase 2 loop
 
-1. Obtain clean CI evidence for `phase2-outcome-integrity`; diagnose/fix rather than bypass failures, then integrate only if clean and routine.
-2. Validate Trader View/Alert output as the sole prediction snapshot input and preserve fail-closed/read-only semantics.
+1. Validate Trader View/Alert output as the sole prediction snapshot input and preserve fail-closed/read-only semantics.
+2. Enforce outcome timing integrity against the source observation before operational collection.
 3. Improve Agent 04 explicit multi-timeframe alignment/conflict intelligence without weakening Agent 05 safety authority.
 4. Add safe observation workflow orchestration only after contracts are green.
 5. Select/validate a zero-cost reference-price source before measuring +15m/+1h/+4h outcomes.
