@@ -1,8 +1,8 @@
 # Rahul AI Team — Project Log
 
 Last audited: 2026-07-30
-Branch: `agent/recover-agent04-agent05`
-PR: #5 (draft; do not merge until newest Agent 06 HEAD has clean CI)
+Branch: `main`
+Phase: **Phase 2 — evidence infrastructure**
 
 This file is the persistent source of truth for architecture, recovery evidence, current health, contracts, safety policy and next work.
 
@@ -15,22 +15,20 @@ Rules:
 - Deterministic safety gates beat model opinions.
 - Generated state uses the normalized atomic `utils/json_writer.py` envelope.
 - Missing, malformed, failed, stale, future-dated or degraded upstream state reduces authority, never increases it.
-- No autonomous execution/broker integration in deterministic V1.
+- No autonomous execution/broker integration.
 - Agent 05 fails closed on `NO_TRADE`, invalid input, unknown decision/risk states, invalid confidence, EXTREME risk and stale Agent 04 state.
 - Agent 06 is read-only and always exposes `execution_enabled: false`.
+- Historical/analytics infrastructure is evidence-only and must never increase trading authority.
 
 ## Architecture
 
-`Agent 02 Technical` + `Agent 03 Macro/News` → **Agent 04 Decision** → **Agent 05 Permission** → **Agent 06 Alert Gateway (read-only)**.
+`Agent 02 Technical` + `Agent 03 Macro/News` → **Agent 04 Decision** → **Agent 05 Permission** → **Agent 06 Alert Gateway (read-only)** → **Trader View / historical evidence**.
 
 Agent 01 remains isolated. Keltner Bot 2.0 is a separate next project.
 
-## Agent status
+## Deterministic V1 status
 
-### Agent 01 — Legacy LLM Macro Analyst
-Status: ISOLATED / LEGACY.
-
-It overlaps Agent 03 Fed collection/directional analysis, depends on Gemini, and contains a legacy bot-action path that conflicts with intelligence → decision → permission separation. Do not integrate into V1. Preserve for later LLM/ML-assisted research; potential reusable concepts include article enrichment, USD analysis, invalidation text and prediction/outcome recording.
+PR #5 merged to `main` on 2026-07-30 after clean effective-HEAD CI (Tests #75). Deterministic V1 is integrated.
 
 ### Agent 02 — XAUUSD Technical Intelligence
 Status: BUILT.
@@ -38,32 +36,38 @@ Status: BUILT.
 Produces normalized M5/M15/H1/H4 state with EMA20, EMA50, RSI14, ATR14, ADX14 and structure.
 
 ### Agent 03 — XAUUSD Macro/News Intelligence
-Status: BUILT v0.2; GREEN at prior HEAD, newest full-scope CI pending.
+Status: BUILT v0.2.
 
 Explicit observed-headline `news_risk`: LOW with no high-impact headlines, MEDIUM for 1–2, HIGH for 3+. RSS scoring cannot emit EXTREME; future validated event-calendar evidence is required for EXTREME.
 
 ### Agent 04 — Decision Engine
-Status: RECOVERED + INTEGRATED v0.3; GREEN at prior HEAD, newest full-scope CI pending.
+Status: INTEGRATED v0.3.
 
 Multi-timeframe fusion weights H4=4, H1=3, M15=2, M5=1. Agent 02 max age 20 minutes; Agent 03 max age 6 hours. Invalid/stale intelligence fails to `NO_TRADE`, confidence 0, EXTREME risk and FAILED health.
 
 ### Agent 05 — Permission Engine
-Status: RECOVERED + INTEGRATED v0.2; GREEN at prior HEAD, newest full-scope CI pending.
+Status: INTEGRATED v0.2.
 
 Final deterministic safety gate. Agent 04 max age 15 minutes. Invalid, failed, unknown, stale or unsafe decision state fails closed. Degraded state produces CAUTION only.
 
 ### Agent 06 — Alert Gateway
-Status: BUILT v0.1; CI PENDING.
+Status: INTEGRATED v0.1.
 
-Read-only downstream boundary consuming `permission.json`. Agent 05 state max age 15 minutes. Missing/malformed/failed/stale/future-dated/unknown permission state emits `BLOCK_TRADING` and FAILED health. Degraded upstream authority is downgraded to CAUTION. Every alert explicitly contains `execution_enabled: false`. Output is `data/current/alert.json`. There is no broker library, order placement, trade modification or trade-closing path.
+Read-only downstream boundary consuming `permission.json`. Agent 05 state max age 15 minutes. Missing/malformed/failed/stale/future-dated/unknown permission state emits `BLOCK_TRADING` and FAILED health. Degraded upstream authority is downgraded to CAUTION. Every alert explicitly contains `execution_enabled: false`. There is no broker library, order placement, trade modification or trade-closing path.
+
+### Agent 01 — Legacy LLM Macro Analyst
+Status: ISOLATED / LEGACY.
+
+It overlaps Agent 03 and contains a legacy bot-action path that conflicts with intelligence → decision → permission separation. Do not integrate without a deliberate overlap-resolution decision.
 
 ## CI / test evidence
 
 - `.github/workflows/tests.yml` runs `python -m unittest discover -s tests -v` on push and pull request using Python 3.11.
 - Recovery HEAD `bdb0e7e`: Tests #43 SUCCESS.
 - Multi-timeframe/fail-closed HEAD `1f988e98`: Tests #53 SUCCESS.
-- Freshness/risk/end-to-end HEAD `06d79b5d`: Tests #67 SUCCESS including unit tests.
-- README + Agent 06 + Agent 06 tests were added after #67. The newest Agent 06 test commit `14c7da8a` had no PR workflow run visible at the first observation. **Do not merge until a workflow for the newest effective HEAD completes successfully.**
+- Freshness/risk/end-to-end HEAD `06d79b5d`: Tests #67 SUCCESS.
+- Deterministic V1 effective HEAD `8501a1d0`: Tests #75 SUCCESS; PR #5 merged.
+- Phase 2 historical observation HEAD `27f54dca`: Tests #86 SUCCESS; no unresolved review threads; PR #6 mergeable and merged after evidence review.
 
 ## Contract snapshot
 
@@ -94,27 +98,35 @@ Agent 06 downstream:
 - always `execution_enabled: false`;
 - no autonomous execution capability.
 
-## Deterministic test coverage
+## Phase 2 historical evidence — MERGED
 
-Coverage includes scoring, indicator/market health, multi-timeframe conflicts, incomplete timeframes, missing inputs, degraded states, stale Agent 02/03/04 states, invalid permission states, synthetic bullish pipeline, degraded pipeline, Agent 03 risk semantics, and Agent 06 fresh/stale/malformed/unknown/degraded/read-only behavior.
+PR #6 introduced the first append-only observation/outcome contract:
+- immutable prediction snapshots with deterministic observation IDs;
+- append-only JSONL storage with duplicate-ID idempotency;
+- outcomes are separate events and never mutate the prediction snapshot;
+- supported horizons are explicitly `15m`, `1h`, `4h`;
+- invalid horizons and non-positive prices fail validation;
+- historical snapshots forcibly store `execution_enabled: false`, even if unsafe caller input claims otherwise;
+- deterministic tests cover immutability, idempotency, horizon/price validation and execution isolation.
 
-## Documentation
+This layer does **not** choose a live market-price provider, run continuous collection, calculate performance statistics, or create trading authority.
 
-README has been rewritten to document the deterministic V1 architecture, state/freshness contracts, Agent 01 isolation, Agent 06 read-only boundary, local commands, testing and post-V1 roadmap.
+## Remaining risks / technical debt
 
-## Remaining V1 risks / technical debt
+1. Agent 03 lacks a validated scheduled-event calendar, so EXTREME event windows remain intentionally unavailable.
+2. Freshness thresholds need later empirical validation against workflow cadence/session behavior.
+3. Agent 01 remains monolithic and credential-dependent but isolated.
+4. Operational orchestration must not accidentally become autonomous execution.
+5. Historical JSONL currently validates duplicate IDs by scanning existing records; adequate for initial evidence volume, but integrity/indexing should be hardened before large datasets.
+6. Outcome infrastructure currently defines events but does not yet provide an append-only outcome writer or enforce one-outcome-per-observation/horizon integrity.
+7. No validated live reference-price source has been selected for outcome measurement.
 
-1. New Agent 06 HEAD needs clean CI evidence.
-2. Agent 03 lacks a validated scheduled-event calendar, so EXTREME event windows are intentionally unavailable.
-3. Freshness thresholds are deterministic V1 policy and need later empirical validation against workflow cadence/session behavior.
-4. Agent 01 remains monolithic and credential-dependent but isolated.
-5. Operational orchestration of Agent 02→03→04→05→06 is not yet a single autonomous trade system and must not become one accidentally.
+## Active Phase 2 loop
 
-## Active loop / finish criteria for PR #5
-
-1. Observe newest CI; fix/retest any failure without bypassing tests.
-2. Inspect complete PR #5 diff for architecture drift, execution capability, unsafe fallbacks and documentation mismatch.
-3. Verify no unresolved review threads/requested changes.
-4. If clean, mark PR #5 ready for review; merge only when evidence remains green and merge state is safe.
-5. After merge, verify `main` and update project source of truth if a follow-up documentation commit is needed.
-6. Deterministic V1 then moves to post-V1 roadmap: automation/orchestration → historical state/outcome collection → architecture hardening → validated integrations → ML-assisted intelligence/feedback → V2.
+1. Harden historical data integrity: append-only outcome writer, observation-ID/horizon idempotency, timestamp/schema validation, and tests for malformed/corrupt history behavior.
+2. Validate Trader View/Alert output as the sole prediction snapshot input and preserve fail-closed/read-only semantics.
+3. Improve Agent 04 explicit multi-timeframe alignment/conflict intelligence without weakening Agent 05 safety authority.
+4. Add safe observation workflow orchestration only after contracts are green.
+5. Select/validate a zero-cost reference-price source before measuring +15m/+1h/+4h outcomes.
+6. Build performance analytics only after enough trustworthy observations/outcomes exist; analytics failures must never increase authority.
+7. Keep stale PR #4 unmerged; it is superseded by integrated Agent 04 and should be closed as housekeeping when safe.
