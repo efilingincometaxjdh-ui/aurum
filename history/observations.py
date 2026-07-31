@@ -209,6 +209,26 @@ def _source_observation(observation_path, observation_id):
     return observation
 
 
+def _validate_existing_outcome(record, observation_path):
+    """Semantically validate persisted outcome evidence before it can occupy an idempotency key."""
+    if not isinstance(record, dict):
+        raise ValueError("invalid existing outcome record")
+    if record.get("schema_version") != 1:
+        raise ValueError("unsupported existing outcome schema_version")
+    validated = build_outcome(
+        record.get("observation_id"),
+        record.get("horizon"),
+        record.get("reference_price"),
+        record.get("measured_at"),
+    )
+    observation = _source_observation(observation_path, validated["observation_id"])
+    observed_at = _parse_timestamp(observation["observed_at"], "observed_at")
+    measured_at = _parse_timestamp(validated["measured_at"], "measured_at")
+    if measured_at < observed_at + HORIZON_DELTAS[validated["horizon"]]:
+        raise ValueError(f"existing outcome measured_at is earlier than the {validated['horizon']} horizon")
+    return validated
+
+
 def append_outcome(path, outcome, observation_path=None):
     """Append one correctly timed outcome per observation/horizon; fail closed on bad evidence."""
     if not isinstance(outcome, dict):
@@ -230,9 +250,10 @@ def append_outcome(path, outcome, observation_path=None):
     target.parent.mkdir(parents=True, exist_ok=True)
     keys = set()
     for record in _read_jsonl(target):
-        key = (record.get("observation_id"), record.get("horizon"))
-        if None in key:
-            raise ValueError("invalid existing outcome record")
+        existing = _validate_existing_outcome(record, observation_path)
+        key = (existing["observation_id"], existing["horizon"])
+        if key in keys:
+            raise ValueError("duplicate outcome key in existing history")
         keys.add(key)
     key = (observation_id, horizon)
     if key in keys:
