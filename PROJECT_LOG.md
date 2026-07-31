@@ -82,6 +82,7 @@ It overlaps Agent 03 and contains a legacy bot-action path that conflicts with i
 - Safe observation orchestration HEAD `ab1d70d9`: Tests #134 SUCCESS; PR #13 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Reference-price evidence contract HEAD `100465d5`: Tests #146 SUCCESS; PR #15 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. PR #14 was deliberately closed unmerged after architecture-log drift was detected despite clean CI.
 - Gold API reference adapter HEAD `feae6fbb`: Tests #152 SUCCESS; PR #16 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. Adapter is transport-free and requires provider `updatedAt`.
+- Outcome orchestration HEAD `53cbeee7`: Tests #158 SUCCESS; PR #17 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. Collector remains transport-free and uses validated provider evidence timestamp as `measured_at`.
 
 ## Contract snapshot
 
@@ -123,7 +124,8 @@ Reference-price evidence → future outcome collector:
 - price must be finite and positive and `observed_at` must be timezone-aware ISO-8601;
 - futures, ETFs, proxies, malformed evidence and credential-requiring sources fail closed before outcome use;
 - Gold API adapter accepts only XAU payloads, requires provider `updatedAt`, and delegates validation to the provider-neutral contract;
-- adapter is transport-free: no network, scheduling, broker or execution path.
+- adapter is transport-free: no network, scheduling, broker or execution path;
+- outcome collector consumes already-fetched validated reference evidence, uses the provider `observed_at` as `measured_at`, and delegates observation identity, horizon timing and idempotency to the append-only outcome contract.
 
 ## Phase 2 historical evidence — ACTIVE
 
@@ -147,6 +149,8 @@ PR #15 adds a provider-neutral fail-closed reference-price evidence contract. It
 
 PR #16 validates gold-api.com as the first reference-evidence candidate through a transport-free normalization adapter. It maps already-fetched XAU payloads to the integrated reference contract, requires provider `updatedAt`, and cannot perform network requests or affect trading authority. Integrated after Tests #152 passed on exact HEAD `feae6fbb`.
 
+PR #17 integrates a transport-free outcome collector for already-fetched validated reference evidence. It uses the provider timestamp as `measured_at`, then delegates source-observation, supported-horizon, timing and idempotency integrity to the append-only outcome contract. Integrated after Tests #158 passed on exact HEAD `53cbeee7`.
+
 This layer still does **not** run continuous collection, calculate performance statistics, or create trading authority.
 
 ## Remaining risks / technical debt
@@ -158,11 +162,12 @@ This layer still does **not** run continuous collection, calculate performance s
 5. Historical JSONL duplicate checks still scan existing records; adequate initially, but indexing should be hardened before large datasets.
 6. Gold API has passed the transport-free evidence adapter contract, but live network collection is not yet integrated or operationally validated.
 7. Outcome timing enforces a minimum horizon but does not impose a maximum lateness/tolerance window; choose that only with collection-cadence evidence.
-8. Observation collection cadence is not yet scheduled; cadence should be chosen only after evidence-volume/freshness implications and reference-price sourcing are reviewed.
+8. Observation/outcome collection cadence is not yet scheduled; cadence should be chosen only after evidence-volume/freshness implications and reference-price sourcing are reviewed.
+9. Existing outcome-history records should receive stronger semantic validation before duplicate-key admission logic so malformed historical records always fail closed rather than merely occupying a key.
 
 ## Active Phase 2 loop
 
-1. Build a transport-free evidence-only outcome orchestration layer that consumes already-validated reference quotes and appends eligible +15m/+1h/+4h outcomes through the existing integrity contract; do not add networking or scheduling yet.
-2. Define evidence-supported outcome lateness tolerance once collection cadence is known.
-3. Build performance analytics only after enough trustworthy observations/outcomes exist; analytics failures must never increase authority.
+1. Harden append-only outcome-history integrity so every existing outcome record is semantically validated before it participates in duplicate/idempotency checks.
+2. Define evidence-supported outcome lateness tolerance only once collection cadence is known.
+3. Build trader-accessible evidence coverage/analytics only after trustworthy observation/outcome integrity is established; analytics failures must never increase authority.
 4. Harden historical indexing only when evidence volume justifies it.
