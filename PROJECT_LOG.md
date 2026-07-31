@@ -80,6 +80,7 @@ It overlaps Agent 03 and contains a legacy bot-action path that conflicts with i
 - Trader View MTF presentation HEAD `7e242bbd`: Tests #119 SUCCESS; PR #11 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Historical MTF evidence HEAD `7720bc5b`: Tests #127 SUCCESS; PR #12 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Safe observation orchestration HEAD `ab1d70d9`: Tests #134 SUCCESS; PR #13 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
+- Reference-price evidence contract HEAD `100465d5`: Tests #146 SUCCESS; PR #15 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. PR #14 was deliberately closed unmerged after architecture-log drift was detected despite clean CI.
 
 ## Contract snapshot
 
@@ -115,6 +116,13 @@ Agent 06 → Trader View → historical evidence:
 - blocked/NO_TRADE snapshots remain valid evidence when safely blocked;
 - observation collector accepts only normalized TraderView envelopes with SUCCESS/DEGRADED health, delegates data safety checks to the existing observation contract, and only appends evidence; FAILED/unknown/malformed envelopes are rejected and cannot affect current trading state.
 
+Reference-price evidence → future outcome collector:
+- must explicitly identify `symbol: XAUUSD`, `market: SPOT`, `quote_currency: USD`;
+- provider identity is mandatory and `requires_credentials` must be exactly false;
+- price must be finite and positive and `observed_at` must be timezone-aware ISO-8601;
+- futures, ETFs, proxies, malformed evidence and credential-requiring sources fail closed before outcome use;
+- this contract validates evidence only and does not select or call a provider.
+
 ## Phase 2 historical evidence — ACTIVE
 
 PR #6 introduced immutable prediction snapshots, deterministic observation IDs, append-only JSONL storage, separate outcomes and explicit `15m`, `1h`, `4h` horizons.
@@ -133,6 +141,8 @@ PR #12 carries explicit MTF intelligence into immutable historical prediction sn
 
 PR #13 integrates an explicit evidence-only collector from normalized `trader_view.json` envelopes into append-only observations. It does not schedule itself, invoke upstream agents, write permission/current state, fetch prices, or execute trades. Integrated after Tests #134 passed on exact HEAD `ab1d70d9`.
 
+PR #15 adds a provider-neutral fail-closed reference-price evidence contract. It requires explicit credential-free spot XAUUSD/USD evidence and rejects futures/ETF/proxy substitutions. Integrated after Tests #146 passed on exact HEAD `100465d5`. No provider was selected and no network/broker/execution path was added.
+
 This layer still does **not** choose a live market-price provider, run continuous collection, calculate performance statistics, or create trading authority.
 
 ## Remaining risks / technical debt
@@ -142,13 +152,13 @@ This layer still does **not** choose a live market-price provider, run continuou
 3. Agent 01 remains monolithic and credential-dependent but isolated.
 4. Operational orchestration must not accidentally become autonomous execution.
 5. Historical JSONL duplicate checks still scan existing records; adequate initially, but indexing should be hardened before large datasets.
-6. No validated live reference-price source has been selected for outcome measurement.
+6. No validated live reference-price source has been selected for outcome measurement; the contract now prevents unsafe proxy substitution.
 7. Outcome timing enforces a minimum horizon but does not impose a maximum lateness/tolerance window; choose that only with collection-cadence evidence.
 8. Observation collection cadence is not yet scheduled; cadence should be chosen only after evidence-volume/freshness implications and reference-price sourcing are reviewed.
 
 ## Active Phase 2 loop
 
-1. Select/validate a zero-cost reference-price source before measuring +15m/+1h/+4h outcomes; do not introduce credentials, paid services or execution coupling.
+1. Select/validate a zero-cost credential-free spot-XAUUSD/USD reference-price source against the integrated contract; do not substitute futures/ETFs/proxies or introduce execution coupling.
 2. Define evidence-supported outcome lateness tolerance once collection cadence is known.
 3. Build performance analytics only after enough trustworthy observations/outcomes exist; analytics failures must never increase authority.
 4. Harden historical indexing only when evidence volume justifies it.
