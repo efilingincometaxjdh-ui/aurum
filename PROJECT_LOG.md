@@ -1,7 +1,7 @@
 # Rahul AI Team — Project Log
 
 Last audited: 2026-07-31
-Branch: `phase2-outcome-timing-integrity`
+Branch: `main`
 Phase: **Phase 2 — evidence infrastructure**
 
 This file is the persistent source of truth for architecture, recovery evidence, current health, contracts, safety policy and next work.
@@ -41,9 +41,9 @@ Status: BUILT v0.2.
 Explicit observed-headline `news_risk`: LOW with no high-impact headlines, MEDIUM for 1–2, HIGH for 3+. RSS scoring cannot emit EXTREME; future validated event-calendar evidence is required for EXTREME.
 
 ### Agent 04 — Decision Engine
-Status: INTEGRATED v0.3.
+Status: INTEGRATED v0.4.
 
-Multi-timeframe fusion weights H4=4, H1=3, M15=2, M5=1. Agent 02 max age 20 minutes; Agent 03 max age 6 hours. Invalid/stale intelligence fails to `NO_TRADE`, confidence 0, EXTREME risk and FAILED health.
+Multi-timeframe fusion weights H4=4, H1=3, M15=2, M5=1. Agent 02 max age 20 minutes; Agent 03 max age 6 hours. Invalid/stale intelligence fails to `NO_TRADE`, confidence 0, EXTREME risk and FAILED health. Phase 2 metadata explicitly exposes ALIGNED / CONFLICT / NEUTRAL state plus H4/H1, M15/M5 and higher-vs-lower conflict without changing weighted decision authority.
 
 ### Agent 05 — Permission Engine
 Status: INTEGRATED v0.2.
@@ -70,7 +70,8 @@ It overlaps Agent 03 and contains a legacy bot-action path that conflicts with i
 - Phase 2 historical observation HEAD `27f54dca`: Tests #86 SUCCESS; PR #6 merged.
 - Outcome-integrity HEAD `7289267b`: Tests #93 SUCCESS; PR #7 merged.
 - Trader View boundary HEAD `893fd357`: Tests #100 SUCCESS; PR #8 merged.
-- Outcome-timing branch: implementation and deterministic tests added in draft PR #9; fresh CI required before integration.
+- Outcome-timing HEAD `726dcdbc`: Tests #107 SUCCESS; PR #9 merged.
+- Agent04 MTF intelligence HEAD `78ade145`: Tests #112 SUCCESS; PR #10 merged after clean exact-HEAD CI, mergeability check and zero unresolved review threads.
 
 ## Contract snapshot
 
@@ -88,7 +89,8 @@ Agent 03 → Agent 04:
 Agent 04 → Agent 05:
 - valid normalized decision state ≤15 minutes old;
 - failed/stale/invalid means BLOCK_TRADING downstream;
-- degraded means CAUTION downstream.
+- degraded means CAUTION downstream;
+- alignment/conflict metadata is intelligence only and does not increase authority.
 
 Agent 05 → Agent 06:
 - valid normalized permission state ≤15 minutes old;
@@ -110,7 +112,9 @@ PR #7 hardened outcome integrity with one outcome per `(observation_id, horizon)
 
 PR #8 requires historical predictions to originate from a valid read-only XAUUSD Trader View and rejects unsafe execution-bearing or contradictory inputs.
 
-Draft PR #9 now joins each appended outcome to exactly one source observation and enforces `measured_at >= observed_at + horizon`. Source history is mandatory for append, duplicate source IDs fail closed, malformed source timestamps/schema fail closed, and timezone-offset comparisons are normalized by aware datetime arithmetic. This prevents a future collector from labeling an early price as a valid +15m/+1h/+4h result.
+PR #9 joins every appended outcome to exactly one source observation and enforces `measured_at >= observed_at + horizon`. Source history is mandatory, duplicate source IDs fail closed, malformed source timestamps/schema fail closed, and timezone-offset comparisons use aware datetime arithmetic.
+
+PR #10 adds explicit Agent04 multi-timeframe alignment/conflict intelligence while preserving deterministic weighted fusion and downstream safety authority.
 
 This layer still does **not** choose a live market-price provider, run continuous collection, calculate performance statistics, or create trading authority.
 
@@ -122,13 +126,14 @@ This layer still does **not** choose a live market-price provider, run continuou
 4. Operational orchestration must not accidentally become autonomous execution.
 5. Historical JSONL duplicate checks still scan existing records; adequate initially, but indexing should be hardened before large datasets.
 6. No validated live reference-price source has been selected for outcome measurement.
-7. Outcome timing currently enforces a minimum horizon but does not impose a maximum lateness/tolerance window; that policy should be chosen only with collection-cadence evidence.
+7. Outcome timing enforces a minimum horizon but does not impose a maximum lateness/tolerance window; choose that only with collection-cadence evidence.
+8. Trader-accessible presentation should surface Agent04 conflict metadata without implying execution authority.
 
 ## Active Phase 2 loop
 
-1. Obtain clean CI evidence for draft PR #9 and integrate only if green.
-2. Improve Agent 04 explicit multi-timeframe alignment/conflict intelligence without weakening Agent 05 safety authority.
-3. Add safe observation workflow orchestration only after contracts are green.
-4. Select/validate a zero-cost reference-price source before measuring +15m/+1h/+4h outcomes.
-5. Define evidence-supported outcome lateness tolerance once collection cadence is known.
-6. Build performance analytics only after enough trustworthy observations/outcomes exist; analytics failures must never increase authority.
+1. Validate Trader Data/Alert presentation of Agent04 alignment/conflict metadata through the read-only chain without weakening Agent05 authority.
+2. Add safe observation workflow orchestration only after downstream contracts remain green.
+3. Select/validate a zero-cost reference-price source before measuring +15m/+1h/+4h outcomes.
+4. Define evidence-supported outcome lateness tolerance once collection cadence is known.
+5. Build performance analytics only after enough trustworthy observations/outcomes exist; analytics failures must never increase authority.
+6. Harden historical indexing only when evidence volume justifies it.
