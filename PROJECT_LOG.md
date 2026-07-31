@@ -81,6 +81,7 @@ It overlaps Agent 03 and contains a legacy bot-action path that conflicts with i
 - Historical MTF evidence HEAD `7720bc5b`: Tests #127 SUCCESS; PR #12 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Safe observation orchestration HEAD `ab1d70d9`: Tests #134 SUCCESS; PR #13 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Reference-price evidence contract HEAD `100465d5`: Tests #146 SUCCESS; PR #15 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. PR #14 was deliberately closed unmerged after architecture-log drift was detected despite clean CI.
+- Gold API reference adapter HEAD `feae6fbb`: Tests #152 SUCCESS; PR #16 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. Adapter is transport-free and requires provider `updatedAt`.
 
 ## Contract snapshot
 
@@ -121,7 +122,8 @@ Reference-price evidence → future outcome collector:
 - provider identity is mandatory and `requires_credentials` must be exactly false;
 - price must be finite and positive and `observed_at` must be timezone-aware ISO-8601;
 - futures, ETFs, proxies, malformed evidence and credential-requiring sources fail closed before outcome use;
-- this contract validates evidence only and does not select or call a provider.
+- Gold API adapter accepts only XAU payloads, requires provider `updatedAt`, and delegates validation to the provider-neutral contract;
+- adapter is transport-free: no network, scheduling, broker or execution path.
 
 ## Phase 2 historical evidence — ACTIVE
 
@@ -141,9 +143,11 @@ PR #12 carries explicit MTF intelligence into immutable historical prediction sn
 
 PR #13 integrates an explicit evidence-only collector from normalized `trader_view.json` envelopes into append-only observations. It does not schedule itself, invoke upstream agents, write permission/current state, fetch prices, or execute trades. Integrated after Tests #134 passed on exact HEAD `ab1d70d9`.
 
-PR #15 adds a provider-neutral fail-closed reference-price evidence contract. It requires explicit credential-free spot XAUUSD/USD evidence and rejects futures/ETF/proxy substitutions. Integrated after Tests #146 passed on exact HEAD `100465d5`. No provider was selected and no network/broker/execution path was added.
+PR #15 adds a provider-neutral fail-closed reference-price evidence contract. It requires explicit credential-free spot XAUUSD/USD evidence and rejects futures/ETF/proxy substitutions. Integrated after Tests #146 passed on exact HEAD `100465d5`.
 
-This layer still does **not** choose a live market-price provider, run continuous collection, calculate performance statistics, or create trading authority.
+PR #16 validates gold-api.com as the first reference-evidence candidate through a transport-free normalization adapter. It maps already-fetched XAU payloads to the integrated reference contract, requires provider `updatedAt`, and cannot perform network requests or affect trading authority. Integrated after Tests #152 passed on exact HEAD `feae6fbb`.
+
+This layer still does **not** run continuous collection, calculate performance statistics, or create trading authority.
 
 ## Remaining risks / technical debt
 
@@ -152,13 +156,13 @@ This layer still does **not** choose a live market-price provider, run continuou
 3. Agent 01 remains monolithic and credential-dependent but isolated.
 4. Operational orchestration must not accidentally become autonomous execution.
 5. Historical JSONL duplicate checks still scan existing records; adequate initially, but indexing should be hardened before large datasets.
-6. No validated live reference-price source has been selected for outcome measurement; the contract now prevents unsafe proxy substitution.
+6. Gold API has passed the transport-free evidence adapter contract, but live network collection is not yet integrated or operationally validated.
 7. Outcome timing enforces a minimum horizon but does not impose a maximum lateness/tolerance window; choose that only with collection-cadence evidence.
 8. Observation collection cadence is not yet scheduled; cadence should be chosen only after evidence-volume/freshness implications and reference-price sourcing are reviewed.
 
 ## Active Phase 2 loop
 
-1. Select/validate a zero-cost credential-free spot-XAUUSD/USD reference-price source against the integrated contract; do not substitute futures/ETFs/proxies or introduce execution coupling.
+1. Build a transport-free evidence-only outcome orchestration layer that consumes already-validated reference quotes and appends eligible +15m/+1h/+4h outcomes through the existing integrity contract; do not add networking or scheduling yet.
 2. Define evidence-supported outcome lateness tolerance once collection cadence is known.
 3. Build performance analytics only after enough trustworthy observations/outcomes exist; analytics failures must never increase authority.
 4. Harden historical indexing only when evidence volume justifies it.
