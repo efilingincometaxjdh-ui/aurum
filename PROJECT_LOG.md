@@ -86,6 +86,11 @@ It overlaps Agent 03 and contains a legacy bot-action path that conflicts with i
 - Existing outcome-history semantic-integrity final HEAD `0bba99ba`: Tests #168 SUCCESS; PR #18 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Evidence coverage analytics initial code/test HEAD `c84b2b9f`: PR #19 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Evidence coverage readability HEAD `2682b0ad`: PR #20 draft; exact-HEAD CI pending after log synchronization.
+- GitLab CI added: `.gitlab-ci.yml` mirrors `.github/workflows/tests.yml` and runs
+  `python -m unittest discover -s tests -v` using Python 3.11 on push and merge request.
+- Infrastructure docs added: `requirements.txt` (placeholder), `.gitignore`, `CONTRIBUTING.md`,
+  and `ROADMAP.md` (Phase 2 aligned) for contributor guidance; these do not change runtime
+  behavior or trading authority.
 
 ## Contract snapshot
 
