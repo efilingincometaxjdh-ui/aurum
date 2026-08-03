@@ -1,0 +1,20 @@
+stages:
+  - test
+
+# Test job: mirrors .github/workflows/tests.yml using Python 3.11
+# and the existing unittest discovery command from PROJECT_LOG.md
+# and README.md.
+test:
+  image: python:3.11-slim
+  stage: test
+  before_script:
+    - python -m pip install --upgrade pip
+    # Install dependencies if requirements.txt is later populated.
+    - if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+  script:
+    - python -m unittest discover -s tests -v
+  artifacts:
+    when: always
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
