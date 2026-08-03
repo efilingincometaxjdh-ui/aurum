@@ -3,82 +3,42 @@
 # AGENT 02 — XAUUSD MARKET INTELLIGENCE
 # ============================================================
 
-import json
 import os
-import urllib.parse
-import urllib.request
 from datetime import datetime, timezone
 
 from market.indicators import calculate_indicators
 from market.structure import analyze_structure
+from market.provider import TwelveDataProvider
 from utils.json_writer import write_state
 
-API_KEY = os.getenv("TWELVE_DATA_API_KEY")
-BASE_URL = "https://api.twelvedata.com/time_series"
 SYMBOL = "XAU/USD"
 TIMEFRAMES = {"M5": "5min", "M15": "15min", "H1": "1h", "H4": "4h"}
-OUTPUT_SIZE = 100
-REQUEST_TIMEOUT = 15
 
 
 def fetch_candles(label, interval):
-    if not API_KEY:
-        raise RuntimeError("TWELVE_DATA_API_KEY environment variable is missing.")
+    """Backward-compatible wrapper around the TwelveDataProvider implementation.
 
-    params = {
-        "symbol": SYMBOL,
-        "interval": interval,
-        "outputsize": OUTPUT_SIZE,
-        "apikey": API_KEY,
-        "format": "JSON",
-    }
-    request = urllib.request.Request(
-        BASE_URL + "?" + urllib.parse.urlencode(params),
-        headers={"User-Agent": "Rahul-AI-Team-Agent02/1.0"},
-    )
-
-    try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except Exception as error:
-        print(f"❌ {label}: Request failed: {error}")
-        return None
-
-    if data.get("status") == "error":
-        print(f"❌ {label}: Twelve Data error: {data.get('message', 'Unknown error')}")
-        return None
-
-    values = data.get("values")
-    if not values:
-        print(f"❌ {label}: No candle data received.")
-        return None
-
-    candles = []
-    for item in values:
-        try:
-            candles.append({
-                "datetime": item["datetime"],
-                "open": float(item["open"]),
-                "high": float(item["high"]),
-                "low": float(item["low"]),
-                "close": float(item["close"]),
-            })
-        except (KeyError, TypeError, ValueError):
-            continue
-
-    if not candles:
-        print(f"❌ {label}: No valid candles after validation.")
-        return None
-
-    candles.reverse()
-    return candles
+    This preserves the original behaviour where a missing TWELVE_DATA_API_KEY
+    raises a RuntimeError. All API logic lives in market.provider.TwelveDataProvider
+    to avoid duplication and to enable dependency injection in tests.
+    """
+    provider = TwelveDataProvider()
+    return provider.fetch_candles(label, interval)
 
 
-def collect_market_data():
+def collect_market_data(provider=None):
+    """Collect market data for all configured timeframes.
+
+    If no provider is supplied, a TwelveDataProvider is constructed, preserving
+    backward-compatible behaviour when the API key is missing (it will raise).
+    """
+    if provider is None:
+        provider = TwelveDataProvider()
+
     market_data = {}
     for label, interval in TIMEFRAMES.items():
         print(f"Fetching XAUUSD {label}...")
-        candles = fetch_candles(label, interval)
+        candles = provider.fetch_candles(label, interval)
         market_data[label] = candles
         if candles:
             latest = candles[-1]
