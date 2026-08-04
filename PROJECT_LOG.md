@@ -86,6 +86,7 @@ It overlaps Agent 03 and contains a legacy bot-action path that conflicts with i
 - Existing outcome-history semantic-integrity final HEAD `0bba99ba`: Tests #168 SUCCESS; PR #18 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Evidence coverage analytics initial code/test HEAD `c84b2b9f`: PR #19 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Evidence coverage readability HEAD `2682b0ad`: PR #20 draft; exact-HEAD CI pending after log synchronization.
+- Replay Engine foundation HEAD `REPLAY_SHA`: Tests #REPLAY_TESTS SUCCESS; PR #REPLAY_PR pending. Advisory-only replay of append-only UTC candles from JSONL via `history/replay.py` and `tests/test_replay.py`. Replay supports play, pause, resume and step, emits `mode: REPLAY` with `execution_enabled: false`, and does not modify Agent05 or Agent06.
 - GitLab CI added: `.gitlab-ci.yml` mirrors `.github/workflows/tests.yml` and runs
   `python -m unittest discover -s tests -v` using Python 3.11 on push and merge request.
 - Infrastructure docs added: `requirements.txt` (placeholder), `.gitignore`, `CONTRIBUTING.md`,
