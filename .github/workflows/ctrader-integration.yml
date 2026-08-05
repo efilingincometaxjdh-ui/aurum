@@ -1,0 +1,10 @@
+- name: Run Agent02 smoke test
+  env:
+    CTRADER_CLIENT_ID: ${{ secrets.CTRADER_CLIENT_ID }}
+    CTRADER_CLIENT_SECRET: ${{ secrets.CTRADER_CLIENT_SECRET }}
+    CTRADER_TOKEN_URL: ${{ secrets.CTRADER_TOKEN_URL }}
+    CTRADER_CANDLES_URL: ${{ secrets.CTRADER_CANDLES_URL }}
+    MARKET_PROVIDER: ctrader
+  run: |
+    pip install -r requirements.txt
+    python -c "from market.provider import get_default_provider; from agent02 import collect_market_data; collect_market_data(provider=get_default_provider())"
