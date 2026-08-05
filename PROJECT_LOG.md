@@ -1,6 +1,6 @@
 # Rahul AI Team — Project Log
 
-Last audited: 2026-08-01
+Last audited: 2026-08-05
 Branch: `phase2/evidence-coverage-readability`
 Phase: **Phase 2 — evidence infrastructure**
 
@@ -85,8 +85,9 @@ It overlaps Agent 03 and contains a legacy bot-action path that conflicts with i
 - Outcome orchestration HEAD `53cbeee7`: Tests #158 SUCCESS; PR #17 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. Collector remains transport-free and uses validated provider evidence timestamp as `measured_at`.
 - Existing outcome-history semantic-integrity final HEAD `0bba99ba`: Tests #168 SUCCESS; PR #18 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Evidence coverage analytics initial code/test HEAD `c84b2b9f`: PR #19 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
-- Evidence coverage readability HEAD `2682b0ad`: PR #20 draft; exact-HEAD CI pending after log synchronization.
-- Replay Engine foundation HEAD `REPLAY_SHA`: Tests #REPLAY_TESTS SUCCESS; PR #REPLAY_PR pending. Advisory-only replay of append-only UTC candles from JSONL via `history/replay.py` and `tests/test_replay.py`. Replay supports play, pause, resume and step, emits `mode: REPLAY` with `execution_enabled: false`, and does not modify Agent05 or Agent06.
+- Evidence coverage readability HEAD `720e05e`: PR #20 merged to `main`; it provides deterministic per-horizon missing counts and EMPTY/PARTIAL/COMPLETE status while remaining read-only and fail-closed.
+- Replay Engine foundation HEAD `4efd22d`: integrated to `main`. Advisory-only replay of append-only UTC candles from JSONL via `history/replay.py` and `tests/test_replay.py` supports play, pause, resume and step, emits `mode: REPLAY` with `execution_enabled: false`, and does not modify Agent05 or Agent06.
+- Windows console compatibility: Agent02 success diagnostics use ASCII-only `[OK]` output. The complete local suite passed: 100 tests, 0 failures (2026-08-05).
 - GitLab CI added: `.gitlab-ci.yml` mirrors `.github/workflows/tests.yml` and runs
   `python -m unittest discover -s tests -v` using Python 3.11 on push and merge request.
 - Infrastructure docs added: `requirements.txt` (placeholder), `.gitignore`, `CONTRIBUTING.md`,
@@ -166,7 +167,7 @@ PR #18 hardens existing persisted outcome history before idempotency admission. 
 
 PR #19 now integrates the read-only evidence coverage report. It validates persisted observations and outcomes before counting them, exposes per-horizon coverage plus complete/incomplete observations, and fails closed to FAILED/zero metrics on corruption or duplicates. It cannot affect Agent05/06 authority and always exposes `execution_enabled: false`.
 
-PR #20 is the active draft: it extends evidence coverage with deterministic per-horizon missing counts and EMPTY/PARTIAL/COMPLETE status while remaining read-only and fail-closed.
+PR #20 is integrated: it extends evidence coverage with deterministic per-horizon missing counts and EMPTY/PARTIAL/COMPLETE status while remaining read-only and fail-closed.
 
 This layer still does **not** run continuous collection, calculate directional/performance statistics, or create trading authority.
 
@@ -184,8 +185,6 @@ This layer still does **not** run continuous collection, calculate directional/p
 
 ## Active Phase 2 loop
 
-1. Validate PR #20 on its exact log-synchronized HEAD; critique any failures and fix rather than bypassing them.
-2. Integrate PR #20 only after clean exact-HEAD CI, mergeability and review-thread evidence.
-3. Define evidence-supported outcome lateness tolerance only once collection cadence is known.
-4. Add directional/performance analytics only after a trustworthy observation-time reference-price contract exists; analytics failures must never increase authority.
-5. Harden historical indexing only when evidence volume justifies it.
+1. Define evidence-supported outcome lateness tolerance only once collection cadence is known.
+2. Add directional/performance analytics only after a trustworthy observation-time reference-price contract exists; analytics failures must never increase authority.
+3. Harden historical indexing only when evidence volume justifies it.
