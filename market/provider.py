@@ -1,12 +1,8 @@
 """market/provider.py
 
-IMarketDataProvider interface and a minimal TwelveDataProvider implementation.
-
-This provider module provides an injectable interface that Agent02 already
-expects. The TwelveDataProvider preserves backward-compatible behavior: if the
-TWELVE_DATA_API_KEY is missing it raises a RuntimeError. The real network
-integration is intentionally isolated so unit tests can inject a FakeProvider
-instead of making network calls.
+Keep the original TwelveDataProvider for backward compatibility and add a
+factory to return the default provider — which will choose cTrader when
+configured via environment variables or MARKET_PROVIDER=ctrader.
 """
 from __future__ import annotations
 
@@ -59,3 +55,39 @@ class TwelveDataProvider(IMarketDataProvider):
             "TwelveDataProvider network client not implemented in this shim; "
             "inject a provider in tests or implement network logic for runtime use."
         )
+
+
+# Lazy import of CTraderProvider so tests that don't need it aren't forced to
+# import requests / network libs.
+def _import_ctrader():
+    try:
+        from market.ctrader_provider import CTraderProvider
+
+        return CTraderProvider
+    except Exception:
+        return None
+
+
+def get_default_provider() -> IMarketDataProvider:
+    """Return a provider instance chosen by environment configuration.
+
+    Priority:
+      1. MARKET_PROVIDER env ("ctrader")
+      2. presence of CTRADER_CLIENT_ID/SECRET
+      3. fallback to TwelveDataProvider
+    """
+    provider_choice = os.environ.get("MARKET_PROVIDER", "").lower()
+    if provider_choice == "ctrader":
+        CTrader = _import_ctrader()
+        if not CTrader:
+            raise RuntimeError("CTrader provider requested but not available")
+        return CTrader()
+
+    # auto-detect by presence of credentials
+    if os.environ.get("CTRADER_CLIENT_ID") and os.environ.get("CTRADER_CLIENT_SECRET"):
+        CTrader = _import_ctrader()
+        if CTrader:
+            return CTrader()
+
+    # default fallback
+    return TwelveDataProvider()
