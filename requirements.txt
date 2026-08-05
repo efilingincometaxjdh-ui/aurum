@@ -1,10 +1,6 @@
 # requirements.txt
 # This project currently relies on the Python standard library and
 # built-in unittest-based tests. When you introduce external libraries,
-# list them here with pinned versions, for example:
-#
-# requests==2.32.3
-#
-# The GitLab CI pipeline runs:
-#   python -m unittest discover -s tests -v
-# and will install anything listed in this file.
+# list them here with pinned versions.
+
+requests==2.31.0
