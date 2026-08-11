@@ -1,10 +1,41 @@
-- name: Run Agent02 smoke test
-  env:
-    CTRADER_CLIENT_ID: ${{ secrets.CTRADER_CLIENT_ID }}
-    CTRADER_CLIENT_SECRET: ${{ secrets.CTRADER_CLIENT_SECRET }}
-    CTRADER_TOKEN_URL: ${{ secrets.CTRADER_TOKEN_URL }}
-    CTRADER_CANDLES_URL: ${{ secrets.CTRADER_CANDLES_URL }}
-    MARKET_PROVIDER: ctrader
-  run: |
-    pip install -r requirements.txt
-    python -c "from market.provider import get_default_provider; from agent02 import collect_market_data; collect_market_data(provider=get_default_provider())"
+name: cTrader integration smoke test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      MARKET_PROVIDER: ctrader
+      CTRADER_ENV: demo
+      CTRADER_CLIENT_ID: ${{ secrets.CTRADER_CLIENT_ID }}
+      CTRADER_CLIENT_SECRET: ${{ secrets.CTRADER_CLIENT_SECRET }}
+      CTRADER_ACCESS_TOKEN: ${{ secrets.CTRADER_ACCESS_TOKEN }}
+      CTRADER_ACCOUNT_ID: ${{ secrets.CTRADER_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate secret presence
+        shell: bash
+        run: |
+          test -n "$CTRADER_CLIENT_ID" || { echo "CTRADER_CLIENT_ID is missing"; exit 1; }
+          test -n "$CTRADER_CLIENT_SECRET" || { echo "CTRADER_CLIENT_SECRET is missing"; exit 1; }
+          test -n "$CTRADER_ACCESS_TOKEN" || { echo "CTRADER_ACCESS_TOKEN is missing"; exit 1; }
+          echo "cTrader credentials: present"
+          echo "Environment: $CTRADER_ENV"
+          echo "Account ID: ${CTRADER_ACCOUNT_ID:+provided}"
+
+      - name: Run Agent02 smoke fetch
+        run: python -u agent02.py
