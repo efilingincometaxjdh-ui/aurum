@@ -1,46 +1,62 @@
-"""cTrader market data provider for Aurum
+"""Read-only cTrader Open API market-data provider.
 
-This provider implements an access-token based cTrader client suitable for
-runtimes where tokens are provisioned externally. The provider requires the
-following environment values:
+Uses Spotware's official ``ctrader-open-api`` Python SDK over the official
+Open API connection. Authentication uses the provisioned access token plus
+application client credentials, then discovers and authenticates an account.
+Historical XAUUSD trendbars are requested through ``ProtoOAGetTrendbarsReq``.
 
+Required environment:
 - CTRADER_CLIENT_ID
 - CTRADER_CLIENT_SECRET
-- CTRADER_ACCESS_TOKEN (pre-provisioned token)
-- CTRADER_API_BASE (optional, defaults to https://api.ctrader.com)
+- CTRADER_ACCESS_TOKEN
 
-The provider intentionally does not perform client_credentials token flow
-by default; it uses the supplied access token for Authorization. This keeps
-config simple and avoids depending on a token endpoint URL.
+Optional:
+- CTRADER_ACCOUNT_ID: pin a specific authorized account; otherwise the first
+  account granted to the access token is selected.
+- CTRADER_ENV: ``demo`` (default) or ``live``.
+- CTRADER_SYMBOL: target symbol, default ``XAU/USD``.
+- CTRADER_REQUEST_COUNT: bars per timeframe, default 250.
 """
 from __future__ import annotations
 
+import calendar
+import datetime as _dt
 import os
-import time
-import logging
 from typing import Dict, List, Optional
 
-import requests
-
-logger = logging.getLogger(__name__)
+from ctrader_open_api import Client, EndPoints, TcpProtocol
+from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
+    ProtoOAAccountAuthReq,
+    ProtoOAApplicationAuthReq,
+    ProtoOAGetAccountListByAccessTokenReq,
+    ProtoOAGetTrendbarsReq,
+    ProtoOASymbolByIdReq,
+    ProtoOASymbolsListReq,
+    ProtoOATrendbarPeriod,
+)
+from ctrader_open_api import Protobuf
+from twisted.internet import reactor
 
 
 class CTraderProvider:
-    """cTrader-compatible market data provider implementing the same
-    interface expected by the rest of the codebase.
+    """Synchronous facade over Spotware's asynchronous Open API client."""
 
-    Requirements:
-    - CTRADER_CLIENT_ID
-    - CTRADER_CLIENT_SECRET
-    - CTRADER_ACCESS_TOKEN
-
-    Optional:
-    - CTRADER_API_BASE (defaults to https://api.ctrader.com)
-
-    The provider uses the ACCESS_TOKEN for Authorization and constructs a
-    default candles endpoint based on API_BASE. It does not require a token
-    endpoint URL or explicit candles URL.
-    """
+    INTERVAL_TO_PERIOD = {
+        "1min": "M1",
+        "2min": "M2",
+        "3min": "M3",
+        "4min": "M4",
+        "5min": "M5",
+        "10min": "M10",
+        "15min": "M15",
+        "30min": "M30",
+        "1h": "H1",
+        "4h": "H4",
+        "12h": "H12",
+        "1d": "D1",
+        "1w": "W1",
+        "1mo": "MN1",
+    }
 
     def __init__(
         self,
@@ -48,74 +64,228 @@ class CTraderProvider:
         client_id: Optional[str] = None,
         client_secret: Optional[str] = None,
         access_token: Optional[str] = None,
-        api_base: Optional[str] = None,
-        timeout: int = 10,
+        account_id: Optional[str] = None,
+        environment: Optional[str] = None,
+        symbol: Optional[str] = None,
+        request_count: Optional[int] = None,
+        timeout: int = 20,
     ):
         self.client_id = client_id or os.environ.get("CTRADER_CLIENT_ID")
         self.client_secret = client_secret or os.environ.get("CTRADER_CLIENT_SECRET")
-        self._access_token = access_token or os.environ.get("CTRADER_ACCESS_TOKEN")
-        self.api_base = api_base or os.environ.get("CTRADER_API_BASE") or "https://api.ctrader.com"
+        self.access_token = access_token or os.environ.get("CTRADER_ACCESS_TOKEN")
+        self.account_id = account_id or os.environ.get("CTRADER_ACCOUNT_ID")
+        self.environment = (environment or os.environ.get("CTRADER_ENV") or "demo").lower()
+        self.symbol_name = symbol or os.environ.get("CTRADER_SYMBOL") or "XAU/USD"
+        self.request_count = int(request_count or os.environ.get("CTRADER_REQUEST_COUNT", "250"))
         self.timeout = int(os.environ.get("CTRADER_REQUEST_TIMEOUT", str(timeout)))
 
-        if not (self.client_id and self.client_secret and self._access_token):
+        if not self.client_id or not self.client_secret or not self.access_token:
             raise RuntimeError(
-                "cTrader configuration missing: CTRADER_CLIENT_ID, CTRADER_CLIENT_SECRET and CTRADER_ACCESS_TOKEN are required"
+                "cTrader configuration missing: CTRADER_CLIENT_ID, "
+                "CTRADER_CLIENT_SECRET and CTRADER_ACCESS_TOKEN are required"
             )
+        if self.environment not in {"demo", "live"}:
+            raise RuntimeError("CTRADER_ENV must be 'demo' or 'live'")
+        if self.request_count <= 0:
+            raise RuntimeError("CTRADER_REQUEST_COUNT must be positive")
 
-        # Build default candles URL
-        base = self.api_base.rstrip("/")
-        self.candles_url = base + "/v1/markets/{symbol}/candles?granularity={granularity}&count={count}"
+        self._client = None
+        self._account_id: Optional[int] = int(self.account_id) if self.account_id else None
+        self._symbol_id: Optional[int] = None
+        self._symbol_digits = 5
+        self._loaded = False
+        self._timeframes: List[str] = []
+        self._index = 0
+        self._cache: Dict[str, List[Dict]] = {}
+        self._error: Optional[Exception] = None
 
-        # token info — we rely on pre-provisioned access token
-        self._token_expires_at = time.time() + 24 * 3600
+    @staticmethod
+    def _normalize_symbol(value: str) -> str:
+        return "".join(ch for ch in value.upper() if ch.isalnum())
 
-    def _get_headers(self) -> Dict[str, str]:
-        return {"Authorization": f"Bearer {self._access_token}", "Accept": "application/json"}
+    @classmethod
+    def _matches_symbol(cls, configured: str, candidate: str) -> bool:
+        return cls._normalize_symbol(configured) == cls._normalize_symbol(candidate)
 
-    def fetch_candles(self, label: str, interval: str, count: int = 500) -> List[Dict]:
-        """Fetch candles for the given symbol/interval.
+    @staticmethod
+    def normalize_trendbar(trendbar, digits: int) -> Dict:
+        if not hasattr(trendbar, "low") or not trendbar.low:
+            raise ValueError("cTrader trendbar missing low price")
+        if not hasattr(trendbar, "utcTimestampInMinutes"):
+            raise ValueError("cTrader trendbar missing utcTimestampInMinutes")
 
-        Normalizes the API response into a list of dicts with keys: open, high,
-        low, close, datetime (ISO-8601). The provider tolerates either a list
-        payload or a dict with a 'candles' key.
+        scale = 100000.0
+        low = trendbar.low / scale
+        open_price = (trendbar.low + int(getattr(trendbar, "deltaOpen", 0))) / scale
+        high = (trendbar.low + int(getattr(trendbar, "deltaHigh", 0))) / scale
+        close = (trendbar.low + int(getattr(trendbar, "deltaClose", 0))) / scale
+        timestamp = int(trendbar.utcTimestampInMinutes) * 60
+        dt = _dt.datetime.fromtimestamp(timestamp, tz=_dt.timezone.utc).isoformat()
+
+        return {
+            "open": round(open_price, digits),
+            "high": round(high, digits),
+            "low": round(low, digits),
+            "close": round(close, digits),
+            "datetime": dt,
+        }
+
+    def fetch_candles(self, label: str, interval: str, count: int = 250) -> List[Dict]:
+        """Return normalized historical candles for one timeframe.
+
+        Agent02 calls this four times on one provider instance. The first call
+        opens one cTrader connection and loads all requested Agent02 timeframes,
+        so Twisted's reactor is never restarted inside the same process.
         """
-        symbol = label.replace("/", "-").replace(" ", "")
-        granularity = interval
+        if interval not in self.INTERVAL_TO_PERIOD:
+            raise ValueError(f"Unsupported cTrader interval: {interval}")
+        self._ensure_loaded()
+        return list(self._cache.get(interval, []))
 
-        url = self.candles_url.format(symbol=symbol, granularity=granularity, count=count)
+    def _ensure_loaded(self) -> None:
+        if self._loaded:
+            return
+        if reactor.running:
+            raise RuntimeError("cTrader provider cannot start its private reactor while another reactor is running")
 
-        headers = self._get_headers()
+        self._timeframes = ["5min", "15min", "1h", "4h"]
+        host = EndPoints.PROTOBUF_LIVE_HOST if self.environment == "live" else EndPoints.PROTOBUF_DEMO_HOST
+        self._client = Client(host, EndPoints.PROTOBUF_PORT, TcpProtocol)
+        self._client.setConnectedCallback(self._on_connected)
+        self._client.setDisconnectedCallback(self._on_disconnected)
+        self._client.startService()
 
-        resp = requests.get(url, headers=headers, timeout=self.timeout)
-        resp.raise_for_status()
+        reactor.callLater(self.timeout, self._fail, RuntimeError("cTrader connection timed out"))
+        reactor.run()
 
-        payload = resp.json()
+        if self._error:
+            raise self._error
+        if not self._loaded:
+            raise RuntimeError("cTrader provider stopped without producing market data")
 
-        if isinstance(payload, dict) and "candles" in payload:
-            candles_src = payload["candles"]
-        elif isinstance(payload, list):
-            candles_src = payload
-        else:
-            raise ValueError(f"Unexpected candles response shape: {payload}")
+    def _on_connected(self, _client) -> None:
+        request = ProtoOAApplicationAuthReq()
+        request.clientId = self.client_id
+        request.clientSecret = self.client_secret
+        self._send(request, self._on_application_auth)
 
-        normalized = []
-        for c in candles_src:
-            time_key = None
-            for k in ("time", "datetime", "timestamp"):
-                if k in c:
-                    time_key = k
-                    break
+    def _on_application_auth(self, _response) -> None:
+        if self._account_id is not None:
+            self._authenticate_account()
+            return
+        request = ProtoOAGetAccountListByAccessTokenReq()
+        request.accessToken = self.access_token
+        self._send(request, self._on_account_list)
 
-            if time_key is None:
-                raise ValueError(f"Candle missing time field: {c}")
+    def _on_account_list(self, response) -> None:
+        accounts = list(getattr(response, "ctidTraderAccount", []))
+        if not accounts:
+            self._fail(RuntimeError("cTrader access token has no authorized trading accounts"))
+            return
+        self._account_id = int(accounts[0].ctidTraderAccountId)
+        self._authenticate_account()
 
-            normalized.append({
-                "open": float(c["open"]),
-                "high": float(c["high"]),
-                "low": float(c["low"]),
-                "close": float(c["close"]),
-                "datetime": str(c[time_key]),
-            })
+    def _authenticate_account(self) -> None:
+        request = ProtoOAAccountAuthReq()
+        request.ctidTraderAccountId = self._account_id
+        request.accessToken = self.access_token
+        self._send(request, self._on_account_auth)
 
-        normalized.sort(key=lambda x: x["datetime"])
-        return normalized
+    def _on_account_auth(self, _response) -> None:
+        request = ProtoOASymbolsListReq()
+        request.ctidTraderAccountId = self._account_id
+        request.includeArchivedSymbols = False
+        self._send(request, self._on_symbols)
+
+    def _on_symbols(self, response) -> None:
+        candidates = list(getattr(response, "symbol", []))
+        match = next(
+            (item for item in candidates if self._matches_symbol(self.symbol_name, getattr(item, "symbolName", ""))),
+            None,
+        )
+        if match is None:
+            self._fail(RuntimeError(f"cTrader symbol not found: {self.symbol_name}"))
+            return
+
+        self._symbol_id = int(match.symbolId)
+        detail = ProtoOASymbolByIdReq()
+        detail.ctidTraderAccountId = self._account_id
+        detail.symbolId.append(self._symbol_id)
+        self._send(detail, self._on_symbol_details)
+
+    def _on_symbol_details(self, response) -> None:
+        symbols = list(getattr(response, "symbol", []))
+        if symbols:
+            self._symbol_digits = int(getattr(symbols[0], "digits", 5))
+        self._index = 0
+        self._request_next_timeframe()
+
+    def _request_next_timeframe(self) -> None:
+        if self._index >= len(self._timeframes):
+            self._loaded = True
+            self._stop_reactor()
+            return
+
+        interval = self._timeframes[self._index]
+        period_name = self.INTERVAL_TO_PERIOD[interval]
+        period = ProtoOATrendbarPeriod.Value(period_name)
+        now = _dt.datetime.now(tz=_dt.timezone.utc)
+        lookback_minutes = {
+            "5min": self.request_count * 5 * 2,
+            "15min": self.request_count * 15 * 2,
+            "1h": self.request_count * 60 * 2,
+            "4h": self.request_count * 240 * 2,
+        }[interval]
+        from_ts = calendar.timegm((now - _dt.timedelta(minutes=lookback_minutes)).utctimetuple()) * 1000
+        to_ts = calendar.timegm(now.utctimetuple()) * 1000
+
+        request = ProtoOAGetTrendbarsReq()
+        request.ctidTraderAccountId = self._account_id
+        request.period = period
+        request.symbolId = self._symbol_id
+        request.count = min(self.request_count, 2500)
+        request.fromTimestamp = from_ts
+        request.toTimestamp = to_ts
+        self._send(request, lambda response: self._on_trendbars(interval, response))
+
+    def _on_trendbars(self, interval: str, response) -> None:
+        trendbars = list(getattr(response, "trendbar", getattr(response, "trendbars", [])))
+        normalized = [self.normalize_trendbar(bar, self._symbol_digits) for bar in trendbars]
+        normalized.sort(key=lambda item: item["datetime"])
+        self._cache[interval] = normalized
+        self._index += 1
+        self._request_next_timeframe()
+
+    def _send(self, request, callback) -> None:
+        try:
+            deferred = self._client.send(request)
+            deferred.addCallback(callback)
+            deferred.addErrback(self._on_error)
+        except Exception as exc:
+            self._fail(exc)
+
+    def _on_error(self, failure) -> None:
+        try:
+            failure.raiseException()
+        except Exception as exc:
+            self._fail(RuntimeError(f"cTrader API request failed: {exc}"))
+
+    def _on_disconnected(self, _client, reason) -> None:
+        if not self._loaded and self._error is None:
+            self._fail(RuntimeError(f"cTrader connection closed before data load: {reason}"))
+
+    def _fail(self, error: Exception) -> None:
+        if self._error is None:
+            self._error = error
+        self._stop_reactor()
+
+    def _stop_reactor(self) -> None:
+        try:
+            if reactor.running:
+                reactor.stop()
+        finally:
+            if self._client is not None:
+                try:
+                    self._client.stopService()
+                except Exception:
+                    pass
