@@ -1,18 +1,7 @@
-<!-- README additions for cTrader -->
+## Recent change: cTrader provider now requires pre-provisioned access token
 
-## cTrader integration
+- Objective: simplify runtime configuration by requiring CTRADER_ACCESS_TOKEN, CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET; remove the dependency on a token endpoint URL or explicit candles URL.
 
-This repository supports using a market data provider for Agent02 via a
-configurable provider. To use cTrader as the source of candles, set the
-following environment variables (or add them as CI secrets):
+- Change: market/ctrader_provider.py now uses a pre-provisioned access token and constructs a default candles endpoint from CTRADER_API_BASE (defaults to https://api.ctrader.com). The provider no longer requires CTRADER_TOKEN_URL or CTRADER_CANDLES_URL.
 
-- CTRADER_CLIENT_ID — your client id
-- CTRADER_CLIENT_SECRET — your client secret
-- CTRADER_TOKEN_URL — OAuth2 token endpoint for cTrader (client_credentials)
-- CTRADER_CANDLES_URL — a URL format string for candle requests, for example:
-  `https://api.ctrader.com/v1/markets/{symbol}/candles?granularity={granularity}&count={count}`
-
-You can also set MARKET_PROVIDER=ctrader to force selection of the cTrader
-provider. The provider uses the CTRADER_CANDLES_URL template and expects the
-returned JSON to either be a list of candle objects or a dict with a
-`candles` key.
+- Test: updated tests to assert the provider requires CTRADER_ACCESS_TOKEN and related credentials for instantiation.

@@ -38,12 +38,12 @@ Produces normalized M5/M15/H1/H4 state with EMA20, EMA50, RSI14, ATR14, ADX14 an
 ### Agent 03 — XAUUSD Macro/News Intelligence
 Status: BUILT v0.2.
 
-Explicit observed-headline `news_risk`: LOW with no high-impact headlines, MEDIUM for 1–2, HIGH for 3+. RSS scoring cannot emit EXTREME; future validated event-calendar evidence is required for EXTREME.
+Explicit observed-headline `news_risk`: LOW with no high-impact headlines, MEDIUM for 1–2, HIGH for 3+. RSS scoring cannot emit EXTREME; future validated event-calendar evidence is required for [...]
 
 ### Agent 04 — Decision Engine
 Status: INTEGRATED v0.4.
 
-Multi-timeframe fusion weights H4=4, H1=3, M15=2, M5=1. Agent 02 max age 20 minutes; Agent 03 max age 6 hours. Invalid/stale intelligence fails to `NO_TRADE`, confidence 0, EXTREME risk and FAILED health. Phase 2 metadata explicitly exposes ALIGNED / CONFLICT / NEUTRAL state plus H4/H1, M15/M5 and higher-vs-lower conflict without changing weighted decision authority.
+Multi-timeframe fusion weights H4=4, H1=3, M15=2, M5=1. Agent 02 max age 20 minutes; Agent 03 max age 6 hours. Invalid/stale intelligence fails to `NO_TRADE`, confidence 0, EXTREME risk and FAILED[...]
 
 ### Agent 05 — Permission Engine
 Status: INTEGRATED v0.2.
@@ -53,17 +53,17 @@ Final deterministic safety gate. Agent 04 max age 15 minutes. Invalid, failed, u
 ### Agent 06 — Alert Gateway
 Status: INTEGRATED v0.1.
 
-Read-only downstream boundary consuming `permission.json`. Agent 05 state max age 15 minutes. Missing/malformed/failed/stale/future-dated/unknown permission state emits `BLOCK_TRADING` and FAILED health. Degraded upstream authority is downgraded to CAUTION. Every alert explicitly contains `execution_enabled: false`. There is no broker library, order placement, trade modification or trade-closing path.
+Read-only downstream boundary consuming `permission.json`. Agent 05 state max age 15 minutes. Missing/malformed/failed/stale/future-dated/unknown permission state emits `BLOCK_TRADING` and FAILED [...]
 
 ### Trader View
 Status: INTEGRATED v0.2.
 
-Trader View exposes Agent04 `ALIGNED / CONFLICT / NEUTRAL`, per-timeframe trends, higher-timeframe conflict, lower-timeframe conflict and higher-vs-lower conflict directly to the trader-readable read-only view. Legacy ratio-derived conflict severity remains for compatibility. Unknown alignment metadata degrades to NEUTRAL intelligence and never changes Agent05/06 permission authority. Execution remains disabled.
+Trader View exposes Agent04 `ALIGNED / CONFLICT / NEUTRAL`, per-timeframe trends, higher-timeframe conflict, lower-timeframe conflict and higher-vs-lower conflict directly to the trader-readable r[...]
 
 ### Agent 01 — Legacy LLM Macro Analyst
 Status: ISOLATED / LEGACY.
 
-It overlaps Agent 03 and contains a legacy bot-action path that conflicts with intelligence → decision → permission separation. Do not integrate without a deliberate overlap-resolution decision.
+It overlaps Agent 03 and contains a legacy bot-action path that conflicts with intelligence → decision → permission separation. Do not integrate without a deliberate overlap-resolution decisio[...]
 
 ## CI / test evidence
 
@@ -80,11 +80,13 @@ It overlaps Agent 03 and contains a legacy bot-action path that conflicts with i
 - Trader View MTF presentation HEAD `7e242bbd`: Tests #119 SUCCESS; PR #11 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Historical MTF evidence HEAD `7720bc5b`: Tests #127 SUCCESS; PR #12 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Safe observation orchestration HEAD `ab1d70d9`: Tests #134 SUCCESS; PR #13 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
-- Reference-price evidence contract HEAD `100465d5`: Tests #146 SUCCESS; PR #15 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. PR #14 was deliberately closed unmerged after architecture-log drift was detected despite clean CI.
-- Gold API reference adapter HEAD `feae6fbb`: Tests #152 SUCCESS; PR #16 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. Adapter is transport-free and requires provider `updatedAt`.
-- Outcome orchestration HEAD `53cbeee7`: Tests #158 SUCCESS; PR #17 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. Collector remains transport-free and uses validated provider evidence timestamp as `measured_at`.
+- Reference-price evidence contract HEAD `100465d5`: Tests #146 SUCCESS; PR #15 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. PR #14 was deliberately c[...]
+- Gold API reference adapter HEAD `feae6fbb`: Tests #152 SUCCESS; PR #16 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. Adapter is transport-free and re[...]
+- Outcome orchestration HEAD `53cbeee7`: Tests #158 SUCCESS; PR #17 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads. Collector remains transport-free and [...]
 - Existing outcome-history semantic-integrity final HEAD `0bba99ba`: Tests #168 SUCCESS; PR #18 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Evidence coverage analytics initial code/test HEAD `c84b2b9f`: PR #19 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
+- Evidence coverage readability HEAD `720e05e`: PR #20 merged to `main`; it provides deterministic per-horizon missing counts and EMPTY/PARTIAL/COMPLETE status while remaining read-only and fail-c[...]
+- Replay Engine foundation HEAD `4efd22d`: integrated to `main`. Advisory-only replay of append-only UTC candles from JSONL via `history/replay.py` and `tests/test_replay.py` supports play, pause,[...]
 - Evidence coverage readability HEAD `720e05e`: PR #20 merged to `main`; it provides deterministic per-horizon missing counts and EMPTY/PARTIAL/COMPLETE status while remaining read-only and fail-closed.
 - Replay Engine foundation HEAD `4efd22d`: integrated to `main`. Advisory-only replay of append-only UTC candles from JSONL via `history/replay.py` and `tests/test_replay.py` supports play, pause, resume and step, emits `mode: REPLAY` with `execution_enabled: false`, and does not modify Agent05 or Agent06.
 - Windows console compatibility: Agent02 success diagnostics use ASCII-only `[OK]` output. The complete local suite passed: 100 tests, 0 failures (2026-08-05).
@@ -124,9 +126,9 @@ Agent 06 → Trader View → historical evidence:
 - Trader View must explicitly identify `mode: READ_ONLY`, `symbol: XAUUSD`, and `execution_enabled: false` before becoming a prediction snapshot;
 - Trader View v0.2 presents Agent04 alignment/conflict intelligence without modifying permission;
 - historical observation rejects unknown decisions/permissions/risks/conflict states, invalid confidence/freshness, execution authority, stale ALLOW states, and decision/permission mismatches;
-- prediction snapshots persist validated `timeframe_alignment`, `timeframe_trends`, and higher/lower/cross-group conflict fields while preserving schema v1 compatibility; legacy Trader View inputs receive conservative NEUTRAL/empty/false evidence defaults;
+- prediction snapshots persist validated `timeframe_alignment`, `timeframe_trends`, and higher/lower/cross-group conflict fields while preserving schema v1 compatibility; legacy Trader View input[...]
 - blocked/NO_TRADE snapshots remain valid evidence when safely blocked;
-- observation collector accepts only normalized TraderView envelopes with SUCCESS/DEGRADED health, delegates data safety checks to the existing observation contract, and only appends evidence; FAILED/unknown/malformed envelopes are rejected and cannot affect current trading state.
+- observation collector accepts only normalized TraderView envelopes with SUCCESS/DEGRADED health, delegates data safety checks to the existing observation contract, and only appends evidence; FA[...]
 
 Reference-price evidence → outcome collector → analytics:
 - must explicitly identify `symbol: XAUUSD`, `market: SPOT`, `quote_currency: USD`;
@@ -135,37 +137,35 @@ Reference-price evidence → outcome collector → analytics:
 - futures, ETFs, proxies, malformed evidence and credential-requiring sources fail closed before outcome use;
 - Gold API adapter accepts only XAU payloads, requires provider `updatedAt`, and delegates validation to the provider-neutral contract;
 - adapter is transport-free: no network, scheduling, broker or execution path;
-- outcome collector consumes already-fetched validated reference evidence, uses the provider `observed_at` as `measured_at`, and delegates observation identity, horizon timing and idempotency to the append-only outcome contract;
-- every persisted outcome must itself pass schema, horizon, finite-positive price, timezone-aware timestamp, source-observation linkage and horizon-timing validation before it can participate in duplicate/idempotency checks; duplicate keys already present in persisted history fail closed;
-- evidence coverage analytics is read-only, validates persisted observations/outcomes before counting, reports +15m/+1h/+4h coverage and complete/incomplete observation counts, and returns FAILED with zero metrics on corrupt/duplicate evidence; it always exposes `execution_enabled: false`.
+- outcome collector consumes already-fetched validated reference evidence, uses the provider timestamp as `measured_at`, and delegates source-observation, supported horizons and idempotency to existing validation logic.
 
 ## Phase 2 historical evidence — ACTIVE
 
 PR #6 introduced immutable prediction snapshots, deterministic observation IDs, append-only JSONL storage, separate outcomes and explicit `15m`, `1h`, `4h` horizons.
 
-PR #7 hardened outcome integrity with one outcome per `(observation_id, horizon)`, orphan rejection, timezone-aware timestamp/schema validation, finite positive-price validation and fail-closed corrupt-history behavior.
+PR #7 hardened outcome integrity with one outcome per `(observation_id, horizon)`, orphan rejection, timezone-aware timestamp/schema validation, finite positive-price validation and fail-closed c[...]
 
 PR #8 requires historical predictions to originate from a valid read-only XAUUSD Trader View and rejects unsafe execution-bearing or contradictory inputs.
 
-PR #9 joins every appended outcome to exactly one source observation and enforces `measured_at >= observed_at + horizon`. Source history is mandatory, duplicate source IDs fail closed, malformed source timestamps/schema fail closed, and timezone-offset comparisons use aware datetime arithmetic.
+PR #9 joins every appended outcome to exactly one source observation and enforces `measured_at >= observed_at + horizon`. Source history is mandatory, duplicate source IDs fail closed, malformed [...]
 
 PR #10 adds explicit Agent04 multi-timeframe alignment/conflict intelligence while preserving deterministic weighted fusion and downstream safety authority.
 
 PR #11 carries that intelligence into Trader View while retaining the Agent06 permission boundary and `execution_enabled: false` invariant.
 
-PR #12 carries explicit MTF intelligence into immutable historical prediction snapshots, validates malformed metadata fail-closed, and preserves compatibility with existing schema-v1 history. Integrated after Tests #127 passed on exact HEAD `7720bc5b`.
+PR #12 carries explicit MTF intelligence into immutable historical prediction snapshots, validates malformed metadata fail-closed, and preserves compatibility with existing schema-v1 history. Int[...]
 
-PR #13 integrates an explicit evidence-only collector from normalized `trader_view.json` envelopes into append-only observations. It does not schedule itself, invoke upstream agents, write permission/current state, fetch prices, or execute trades. Integrated after Tests #134 passed on exact HEAD `ab1d70d9`.
+PR #13 integrates an explicit evidence-only collector from normalized `trader_view.json` envelopes into append-only observations. It does not schedule itself, invoke upstream agents, write permis[...]
 
-PR #15 adds a provider-neutral fail-closed reference-price evidence contract. It requires explicit credential-free spot XAUUSD/USD evidence and rejects futures/ETF/proxy substitutions. Integrated after Tests #146 passed on exact HEAD `100465d5`.
+PR #15 adds a provider-neutral fail-closed reference-price evidence contract. It requires explicit credential-free spot XAUUSD/USD evidence and rejects futures/ETF/proxy substitutions. Integrated[...]
 
-PR #16 validates gold-api.com as the first reference-evidence candidate through a transport-free normalization adapter. It maps already-fetched XAU payloads to the integrated reference contract, requires provider `updatedAt`, and cannot perform network requests or affect trading authority. Integrated after Tests #152 passed on exact HEAD `feae6fbb`.
+PR #16 validates gold-api.com as the first reference-evidence candidate through a transport-free normalization adapter. It maps already-fetched XAU payloads to the integrated reference contract, [...]
 
-PR #17 integrates a transport-free outcome collector for already-fetched validated reference evidence. It uses the provider timestamp as `measured_at`, then delegates source-observation, supported-horizon, timing and idempotency integrity to the append-only outcome contract. Integrated after Tests #158 passed on exact HEAD `53cbeee7`.
+PR #17 integrates a transport-free outcome collector for already-fetched validated reference evidence. It uses the provider timestamp as `measured_at`, then delegates source-observation, supporte[...]
 
-PR #18 hardens existing persisted outcome history before idempotency admission. Every prior record is semantically rebuilt and validated, must link to a valid source observation, must satisfy its horizon timing, and duplicate persisted `(observation_id, horizon)` keys fail closed. Integrated after final exact HEAD `0bba99ba` passed Tests #168.
+PR #18 hardens existing persisted outcome history before idempotency admission. Every prior record is semantically rebuilt and validated, must link to a valid source observation, must satisfy its[...]
 
-PR #19 now integrates the read-only evidence coverage report. It validates persisted observations and outcomes before counting them, exposes per-horizon coverage plus complete/incomplete observations, and fails closed to FAILED/zero metrics on corruption or duplicates. It cannot affect Agent05/06 authority and always exposes `execution_enabled: false`.
+PR #19 now integrates the read-only evidence coverage report. It validates persisted observations and outcomes before counting them, exposes per-horizon coverage plus complete/incomplete observat[...]
 
 PR #20 is integrated: it extends evidence coverage with deterministic per-horizon missing counts and EMPTY/PARTIAL/COMPLETE status while remaining read-only and fail-closed.
 
@@ -181,10 +181,28 @@ This layer still does **not** run continuous collection, calculate directional/p
 6. Gold API has passed the transport-free evidence adapter contract, but live network collection is not yet integrated or operationally validated.
 7. Outcome timing enforces a minimum horizon but does not impose a maximum lateness/tolerance window; choose that only with collection-cadence evidence.
 8. Observation/outcome collection cadence is not yet scheduled; cadence should be chosen only after evidence-volume/freshness implications and reference-price sourcing are reviewed.
-9. Coverage analytics currently reports evidence completeness only; directional/performance statistics require an explicit source/reference-price-at-observation contract before they can be trustworthy.
+9. Coverage analytics currently reports evidence completeness only; directional/performance statistics require an explicit source/reference-price-at-observation contract before they can be trustw[...]
 
 ## Active Phase 2 loop
 
 1. Define evidence-supported outcome lateness tolerance only once collection cadence is known.
 2. Add directional/performance analytics only after a trustworthy observation-time reference-price contract exists; analytics failures must never increase authority.
 3. Harden historical indexing only when evidence volume justifies it.
+
+
+## Recent change: cTrader provider (feature/ctrader-provider)
+
+- Problem: When the repository was configured to use cTrader, the previous provider model required a token endpoint URL (CTRADER_TOKEN_URL) or CTRADER_CANDLES_URL. Some deployments instead supply a pre-provisioned access token and API base only. In addition, the provider import failures were being silently swallowed by the factory which caused a confusing fallback to the TwelveDataProvider.
+
+- Fix implemented on branch `feature/ctrader-provider` (PR #3):
+  - Agent02 now uses `get_default_provider()` so the runtime provider selection is configurable via environment variables.
+  - The cTrader provider was updated to prefer a pre-provisioned access token (`CTRADER_ACCESS_TOKEN`) and to construct a sensible default candles endpoint from `CTRADER_API_BASE` (defaults to `https://api.ctrader.com`). This removes the hard dependency on `CTRADER_TOKEN_URL` and an explicit `CTRADER_CANDLES_URL` in common deployments.
+  - `market/provider.py` import handling was hardened to surface import/configuration errors when cTrader is explicitly requested or when credentials/tokens are present, avoiding silent fallback to the TwelveDataProvider.
+  - Tests updated: `tests/test_ctrader_provider.py` added/updated to cover instantiation modes and configuration errors.
+  - CI workflow `.github/workflows/ctrader-integration.yml` was added/updated as a manual gated smoke test that uses `CTRADER_ACCESS_TOKEN`.
+
+- Files changed: `agent02.py`, `market/ctrader_provider.py`, `market/provider.py`, `tests/test_ctrader_provider.py`, `.github/workflows/ctrader-integration.yml`, `PROJECT_LOG.md`.
+
+- Required secrets for manual smoke: `CTRADER_CLIENT_ID`, `CTRADER_CLIENT_SECRET`, `CTRADER_ACCESS_TOKEN`, (optional) `CTRADER_API_BASE`.
+
+- Remaining work: run the manual cTrader demo smoke test (manual Actions run) with the required secrets, capture a real XAUUSD candles payload, and, if necessary, add a tiny normalization patch and a recorded unit test to lock the shape.

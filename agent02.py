@@ -6,9 +6,9 @@
 import os
 from datetime import datetime, timezone
 
+from market.provider import get_default_provider
 from market.indicators import calculate_indicators
 from market.structure import analyze_structure
-from market.provider import TwelveDataProvider
 from utils.json_writer import write_state
 
 SYMBOL = "XAU/USD"
@@ -16,24 +16,26 @@ TIMEFRAMES = {"M5": "5min", "M15": "15min", "H1": "1h", "H4": "4h"}
 
 
 def fetch_candles(label, interval):
-    """Backward-compatible wrapper around the TwelveDataProvider implementation.
+    """Backward-compatible wrapper around the market provider implementation.
 
-    This preserves the original behaviour where a missing TWELVE_DATA_API_KEY
-    raises a RuntimeError. All API logic lives in market.provider.TwelveDataProvider
-    to avoid duplication and to enable dependency injection in tests.
+    This preserves the previous behaviour while using the configurable
+    provider factory. If no provider is supplied via dependency injection,
+    the runtime default provider (get_default_provider) is used.
     """
-    provider = TwelveDataProvider()
+    provider = get_default_provider()
     return provider.fetch_candles(label, interval)
 
 
 def collect_market_data(provider=None):
     """Collect market data for all configured timeframes.
 
-    If no provider is supplied, a TwelveDataProvider is constructed, preserving
-    backward-compatible behaviour when the API key is missing (it will raise).
+    If no provider is supplied, the repository default provider is constructed
+    via get_default_provider(), which selects the configured provider (cTrader
+    when configured) or falls back to TwelveDataProvider for backwards
+    compatibility.
     """
     if provider is None:
-        provider = TwelveDataProvider()
+        provider = get_default_provider()
 
     market_data = {}
     for label, interval in TIMEFRAMES.items():
