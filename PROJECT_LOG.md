@@ -87,6 +87,8 @@ It overlaps Agent 03 and contains a legacy bot-action path that conflicts with i
 - Evidence coverage analytics initial code/test HEAD `c84b2b9f`: PR #19 merged after exact-HEAD CI success, mergeability check and zero unresolved review threads.
 - Evidence coverage readability HEAD `720e05e`: PR #20 merged to `main`; it provides deterministic per-horizon missing counts and EMPTY/PARTIAL/COMPLETE status while remaining read-only and fail-c[...]
 - Replay Engine foundation HEAD `4efd22d`: integrated to `main`. Advisory-only replay of append-only UTC candles from JSONL via `history/replay.py` and `tests/test_replay.py` supports play, pause,[...]
+- Evidence coverage readability HEAD `720e05e`: PR #20 merged to `main`; it provides deterministic per-horizon missing counts and EMPTY/PARTIAL/COMPLETE status while remaining read-only and fail-closed.
+- Replay Engine foundation HEAD `4efd22d`: integrated to `main`. Advisory-only replay of append-only UTC candles from JSONL via `history/replay.py` and `tests/test_replay.py` supports play, pause, resume and step, emits `mode: REPLAY` with `execution_enabled: false`, and does not modify Agent05 or Agent06.
 - Windows console compatibility: Agent02 success diagnostics use ASCII-only `[OK]` output. The complete local suite passed: 100 tests, 0 failures (2026-08-05).
 - GitLab CI added: `.gitlab-ci.yml` mirrors `.github/workflows/tests.yml` and runs
   `python -m unittest discover -s tests -v` using Python 3.11 on push and merge request.

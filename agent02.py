@@ -44,7 +44,7 @@ def collect_market_data(provider=None):
         market_data[label] = candles
         if candles:
             latest = candles[-1]
-            print(f"✅ {label}: {len(candles)} candles | Latest close: {latest['close']:.2f} | Time: {latest['datetime']}")
+            print(f"[OK] {label}: {len(candles)} candles | Latest close: {latest['close']:.2f} | Time: {latest['datetime']}")
     return market_data
 
 
