@@ -25,16 +25,15 @@ import os
 from typing import Dict, List, Optional
 
 from ctrader_open_api import Client, EndPoints, TcpProtocol
-from ctrader_open_api.messages.OpenApiModelMessages_pb2 import (
+from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOAAccountAuthReq,
     ProtoOAApplicationAuthReq,
     ProtoOAGetAccountListByAccessTokenReq,
     ProtoOAGetTrendbarsReq,
     ProtoOASymbolByIdReq,
     ProtoOASymbolsListReq,
-    ProtoOATrendbarPeriod,
 )
-from ctrader_open_api import Protobuf
+from ctrader_open_api.messages.OpenApiModelMessages_pb2 import ProtoOATrendbarPeriod
 from twisted.internet import reactor
 
 
@@ -131,12 +130,7 @@ class CTraderProvider:
         }
 
     def fetch_candles(self, label: str, interval: str, count: int = 250) -> List[Dict]:
-        """Return normalized historical candles for one timeframe.
-
-        Agent02 calls this four times on one provider instance. The first call
-        opens one cTrader connection and loads all requested Agent02 timeframes,
-        so Twisted's reactor is never restarted inside the same process.
-        """
+        """Return normalized historical candles for one timeframe."""
         if interval not in self.INTERVAL_TO_PERIOD:
             raise ValueError(f"Unsupported cTrader interval: {interval}")
         self._ensure_loaded()
@@ -249,7 +243,7 @@ class CTraderProvider:
         self._send(request, lambda response: self._on_trendbars(interval, response))
 
     def _on_trendbars(self, interval: str, response) -> None:
-        trendbars = list(getattr(response, "trendbar", getattr(response, "trendbars", [])))
+        trendbars = list(getattr(response, "trendbar", []))
         normalized = [self.normalize_trendbar(bar, self._symbol_digits) for bar in trendbars]
         normalized.sort(key=lambda item: item["datetime"])
         self._cache[interval] = normalized
