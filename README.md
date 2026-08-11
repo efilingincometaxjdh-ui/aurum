@@ -38,7 +38,7 @@ CTRADER_SYMBOL       # XAU/USD (default)
 CTRADER_REQUEST_COUNT
 ```
 
-Use the **demo** environment for validation first. cTrader Open API separates demo and live endpoints, and historical bars are requested with `ProtoOAGetTrendbarsReq`; the Python SDK is maintained by Spotware. citeturn683079search3turn969868search0turn969868search3
+Use the **demo** environment for validation first. cTrader Open API separates demo and live endpoints. Historical bars are requested through the Open API trendbar messages and the Python SDK is maintained by Spotware.
 
 ## Agent 03 — XAUUSD Macro/News Intelligence
 
