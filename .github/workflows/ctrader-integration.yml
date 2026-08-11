@@ -39,3 +39,11 @@ jobs:
 
       - name: Run Agent02 smoke fetch
         run: python -u agent02.py
+
+      - name: Upload Agent02 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctrader-agent02-evidence
+          path: data/current/agent02.json
+          if-no-files-found: warn
