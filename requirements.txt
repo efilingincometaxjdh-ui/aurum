@@ -1,6 +1,2 @@
-# requirements.txt
-# This project currently relies on the Python standard library and
-# built-in unittest-based tests. When you introduce external libraries,
-# list them here with pinned versions.
-
-requests==2.31.0
+# Runtime dependencies
+ctrader-open-api==0.9.2
