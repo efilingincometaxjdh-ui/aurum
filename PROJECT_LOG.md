@@ -1,7 +1,7 @@
 # Rahul AI Team — Project Log
 
-Last audited: 2026-08-12
-Branch: `fix/ctrader-runtime-cleanup`
+Last audited: 2026-08-15
+Branch: `main`
 Phase: **Phase 2 — live observation infrastructure**
 
 This file is the canonical project status. Historical milestones are summarized once; current runtime blockers are tracked separately.
@@ -42,6 +42,7 @@ Agent 01 remains isolated legacy code. Keltner Bot 2.0 is a separate project.
 - Replay Engine foundation integrated; replay is advisory-only and keeps `execution_enabled: false`.
 - Windows console compatibility fixed; deterministic local suite passed 100/100 on 2026-08-05.
 - GitLab CI added as a duplicate deterministic test runner for push/merge-request validation.
+- cTrader trendbar normalization hardened: the Open API fixed 1e-5 relative scale is explicit, broker symbol digits control final rounding, and deterministic tests cover 5-digit, non-default precision, timestamp, and invalid-input behavior. Merged to `main` as PR #5 on 2026-08-15 after exact-head GitHub Actions test success.
 
 ## Agent 02 runtime provider
 
