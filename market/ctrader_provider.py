@@ -107,25 +107,40 @@ class CTraderProvider:
         return cls._normalize_symbol(configured) == cls._normalize_symbol(candidate)
 
     @staticmethod
-    def normalize_trendbar(trendbar, digits: int) -> Dict:
+    def _price_from_relative(relative: int, digits: int) -> float:
+        """Convert cTrader's fixed 1e-5 relative price to symbol precision.
+
+        cTrader's ProtoOATrendbar relative prices are defined by the Open API
+        as the integer price divided by 100000. Symbol ``digits`` controls the
+        final rounding precision; it does not change the trendbar relative
+        scale.
+        """
+        if not isinstance(digits, int) or isinstance(digits, bool) or digits < 0:
+            raise ValueError("cTrader symbol digits must be a non-negative integer")
+        if not isinstance(relative, int) or isinstance(relative, bool):
+            raise ValueError("cTrader relative price must be an integer")
+        return round(relative / 100000.0, digits)
+
+    @classmethod
+    def normalize_trendbar(cls, trendbar, digits: int) -> Dict:
         if not hasattr(trendbar, "low") or not trendbar.low:
             raise ValueError("cTrader trendbar missing low price")
         if not hasattr(trendbar, "utcTimestampInMinutes"):
             raise ValueError("cTrader trendbar missing utcTimestampInMinutes")
 
-        scale = 100000.0
-        low = trendbar.low / scale
-        open_price = (trendbar.low + int(getattr(trendbar, "deltaOpen", 0))) / scale
-        high = (trendbar.low + int(getattr(trendbar, "deltaHigh", 0))) / scale
-        close = (trendbar.low + int(getattr(trendbar, "deltaClose", 0))) / scale
+        low_relative = int(trendbar.low)
+        open_relative = low_relative + int(getattr(trendbar, "deltaOpen", 0))
+        high_relative = low_relative + int(getattr(trendbar, "deltaHigh", 0))
+        close_relative = low_relative + int(getattr(trendbar, "deltaClose", 0))
+
         timestamp = int(trendbar.utcTimestampInMinutes) * 60
         dt = _dt.datetime.fromtimestamp(timestamp, tz=_dt.timezone.utc).isoformat()
 
         return {
-            "open": round(open_price, digits),
-            "high": round(high, digits),
-            "low": round(low, digits),
-            "close": round(close, digits),
+            "open": cls._price_from_relative(open_relative, digits),
+            "high": cls._price_from_relative(high_relative, digits),
+            "low": cls._price_from_relative(low_relative, digits),
+            "close": cls._price_from_relative(close_relative, digits),
             "datetime": dt,
         }
 
