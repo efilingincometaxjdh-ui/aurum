@@ -65,6 +65,35 @@ class TestCTraderProviderConfig(unittest.TestCase):
         self.assertEqual(normalized["close"], 2003.03456)
         self.assertTrue(normalized["datetime"].endswith("+00:00"))
 
+    def test_trendbar_normalization_rounds_to_non_default_symbol_precision(self):
+        trendbar = SimpleNamespace(
+            low=200123456,
+            deltaOpen=120000,
+            deltaHigh=340000,
+            deltaClose=180000,
+            utcTimestampInMinutes=29700000,
+        )
+        normalized = CTraderProvider.normalize_trendbar(trendbar, digits=2)
+        self.assertEqual(normalized["low"], 2001.23)
+        self.assertEqual(normalized["open"], 2002.43)
+        self.assertEqual(normalized["high"], 2004.63)
+        self.assertEqual(normalized["close"], 2003.03)
+        self.assertTrue(normalized["datetime"].endswith("+00:00"))
+
+    def test_invalid_relative_price_and_digits_are_rejected(self):
+        with self.assertRaises(ValueError):
+            CTraderProvider._price_from_relative(200123456, -1)
+        with self.assertRaises(ValueError):
+            CTraderProvider._price_from_relative(200123456, True)
+        with self.assertRaises(ValueError):
+            CTraderProvider._price_from_relative(200123456.0, 5)
+
+    def test_trendbar_missing_required_fields_are_rejected(self):
+        with self.assertRaises(ValueError):
+            CTraderProvider.normalize_trendbar(SimpleNamespace(utcTimestampInMinutes=1), digits=5)
+        with self.assertRaises(ValueError):
+            CTraderProvider.normalize_trendbar(SimpleNamespace(low=1), digits=5)
+
 
 if __name__ == "__main__":
     unittest.main()
