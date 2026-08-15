@@ -42,8 +42,10 @@ Agent 01 remains isolated legacy code. Keltner Bot 2.0 is a separate project.
 - Replay Engine foundation integrated; replay is advisory-only and keeps `execution_enabled: false`.
 - Windows console compatibility fixed; deterministic local suite passed 100/100 on 2026-08-05.
 - GitLab CI added as a duplicate deterministic test runner for push/merge-request validation.
-- cTrader trendbar normalization hardened: the Open API fixed 1e-5 relative scale is explicit, broker symbol digits control final rounding, and deterministic tests cover 5-digit, non-default precision, timestamp, and invalid-input behavior. Merged to `main` as PR #5 on 2026-08-15 after exact-head GitHub Actions test success.
+- cTrader trendbar normalization hardened: the Open API fixed 1e-5 relative scale is explicit, broker symbol digits control final rounding, and deterministic tests cover 5-digit, non-default precision, timestamp, and invalid-input behavior. Merged to `main` on 2026-08-15 after exact-head GitHub Actions test success.
 - Read-only cTrader DEMO evidence smoke workflow scheduled every 15 minutes and retained as manually dispatchable.
+- cTrader demo authorization/account provisioning was updated externally; the latest smoke run now reaches broker-symbol resolution with the explicit account selected.
+- PR #7: separate read-only BTCUSD cTrader diagnostic smoke workflow merged to `main` on 2026-08-15 after exact-head deterministic CI success. It does not change Agent02's production XAU/USD path and does not enable trading.
 
 ## Agent 02 runtime provider
 
@@ -62,6 +64,7 @@ Optional runtime settings:
 - `CTRADER_ACCOUNT_ID` — pin a specific authorized account.
 - `CTRADER_ENV` — `demo` by default, or `live`.
 - `CTRADER_SYMBOL` — `XAU/USD` by default.
+- `CTRADER_SYMBOL_ALIASES` — explicit broker-specific symbol aliases; there is no undocumented universal alias fallback.
 - `CTRADER_REQUEST_COUNT` — 250 bars by default.
 
 The provider discovers the authorized account, resolves the broker-specific XAU/USD symbol, obtains symbol precision, requests M5/M15/H1/H4 trendbars through `ProtoOAGetTrendbarsReq`, and normalizes them to the repository candle contract.
@@ -70,17 +73,19 @@ The provider discovers the authorized account, resolves the broker-specific XAU/
 
 `TwelveDataProvider` remains only as an explicit test/migration shim. It is **not** a runtime fallback. A missing cTrader configuration now fails clearly instead of silently reaching the unimplemented Twelve Data shim.
 
-### Current smoke workflow
+### Current smoke workflows
 
-`.github/workflows/ctrader-integration.yml` is scheduled every 15 minutes and remains manually dispatchable.
+`.github/workflows/ctrader-integration.yml` is scheduled every 15 minutes and remains manually dispatchable for the production XAU/USD path.
 
-It:
+`.github/workflows/ctrader-btc-smoke.yml` is a separate 15-minute/manual diagnostic path with `CTRADER_SYMBOL=BTC/USD` used only to distinguish account/market-data provisioning issues from XAUUSD symbol resolution.
 
-1. Checks out the selected branch.
-2. Installs the pinned cTrader SDK.
-3. Verifies the three required secrets are present without printing values.
-4. Runs `python -u agent02.py` against the demo endpoint.
-5. Uploads `data/current/agent02.json` as evidence even when the smoke step fails.
+Both workflows:
+
+1. Check out the selected branch.
+2. Install the pinned cTrader SDK.
+3. Verify the required secrets are present without printing values.
+4. Run `python -u agent02.py` against the demo endpoint.
+5. Upload `data/current/agent02.json` as evidence even when the smoke step fails.
 
 No `CTRADER_TOKEN_URL` or `CTRADER_CANDLES_URL` secret is required.
 
@@ -97,25 +102,28 @@ Required evidence:
 5. Successful `data/current/agent02.json` generation.
 6. Repeated observations sufficient to derive empirical freshness/timing tolerance.
 
-### Current runtime blocker — 2026-08-15
+### Current runtime state — 2026-08-15
 
-The first scheduled smoke run on commit `11138cfdc74e12988f6ca302c1691293d869ddba` reached GitHub Actions successfully: dependencies installed and all three required cTrader secrets were present. Agent02 then failed during authorized-account discovery with:
+The latest production XAUUSD smoke run on `main` commit `3730688830f5c365d211a19f567914b7b5d33bd3` confirmed that the updated credentials and explicit account ID are present and the run reaches symbol resolution. It then fails with:
 
-`cTrader access token has no authorized trading accounts`
+`cTrader symbol not found: XAU/USD; aliases=none; available_symbols=`
 
-The uploaded `agent02.json` evidence is therefore `FAILED` with no market data. This is an external cTrader authorization/account-provisioning blocker, not a code/test failure. The Phase 2 gate remains closed until the access token is associated with at least one authorized demo account or an explicitly authorized `CTRADER_ACCOUNT_ID` is provisioned.
+The symbol list returned by the authorized DEMO account is empty, so there is currently no evidence for a broker-specific XAUUSD alias and no trustworthy market-data sample. This is now the active Phase 2 runtime blocker.
 
-Until those conditions are met, downstream analytics must not be treated as operational evidence.
+The separate BTCUSD diagnostic workflow is integrated on `main` and runs every 15 minutes. Its purpose is to determine whether the empty symbol response is account/market-data provisioning related or specific to XAUUSD. No BTCUSD runtime evidence has yet been accepted in this log; the next scheduled run must provide the actual artifact before drawing conclusions.
+
+Until a non-empty symbol list and non-empty M5/M15/H1/H4 trendbar responses are observed, downstream analytics and timing tolerance must not be treated as operational evidence.
 
 ## Remaining technical debt
 
-1. Resolve cTrader demo authorization/account provisioning, then rerun the scheduled smoke path.
-2. Add recorded real-response fixtures after the first successful demo smoke run.
-3. Harden historical indexing only when evidence volume justifies it.
-4. Validate observation/outcome lateness empirically from actual scheduled collection cadence.
-5. Add directional/performance analytics only after trustworthy observation-time reference prices exist.
-6. Add refresh-token persistence only if the runtime needs automatic access-token renewal; the current smoke path intentionally uses the provisioned access token.
+1. Obtain a successful BTCUSD diagnostic evidence artifact to distinguish account/market-data provisioning from XAUUSD-specific symbol availability.
+2. Resolve XAUUSD broker symbol availability or explicit alias configuration only from actual cTrader symbol evidence.
+3. Add recorded real-response fixtures after the first successful DEMO smoke run.
+4. Harden historical indexing only when evidence volume justifies it.
+5. Validate observation/outcome lateness empirically from actual scheduled collection cadence.
+6. Add directional/performance analytics only after trustworthy observation-time reference prices exist.
+7. Add refresh-token persistence only if the runtime needs automatic access-token renewal; the current smoke path intentionally uses the provisioned access token.
 
 ## Safety status
 
-Agent 05 and Agent 06 remain unchanged by the cTrader runtime integration. The cTrader provider is read-only market-data infrastructure and does not place, modify or close trades.
+Agent 05 and Agent 06 remain unchanged by the cTrader runtime integration. The cTrader provider and BTCUSD diagnostic are read-only market-data infrastructure and do not place, modify or close trades.
