@@ -46,6 +46,8 @@ Agent 01 remains isolated legacy code. Keltner Bot 2.0 is a separate project.
 - Read-only cTrader DEMO evidence smoke workflow scheduled every 15 minutes and retained as manually dispatchable.
 - cTrader demo authorization/account provisioning was updated externally; the latest smoke run now reaches broker-symbol resolution with the explicit account selected.
 - PR #7: separate read-only BTCUSD cTrader diagnostic smoke workflow merged to `main` on 2026-08-15 after exact-head deterministic CI success. It does not change Agent02's production XAU/USD path and does not enable trading.
+- PR #8: read-only cTrader account/symbol inventory diagnostic merged to `main` on 2026-08-15 after exact-head deterministic CI success.
+- PR #9: read-only cTrader token-account entitlement diagnostic merged to `main` on 2026-08-15 after exact-head deterministic CI success. It verifies that an explicitly configured account is actually granted to the access token and that the account authorization response matches the configured cTID trading-account ID before symbol inventory is evaluated.
 
 ## Agent 02 runtime provider
 
@@ -84,7 +86,7 @@ Both workflows:
 1. Check out the selected branch.
 2. Install the pinned cTrader SDK.
 3. Verify the required secrets are present without printing values.
-4. Run `python -u agent02.py` against the demo endpoint.
+4. Run `python -u agent02.py` against the demo endpoint (the BTC diagnostic first runs the account/symbol inventory probe).
 5. Upload `data/current/agent02.json` as evidence even when the smoke step fails.
 
 No `CTRADER_TOKEN_URL` or `CTRADER_CANDLES_URL` secret is required.
@@ -104,25 +106,28 @@ Required evidence:
 
 ### Current runtime state — 2026-08-15
 
-The latest production XAUUSD smoke run on `main` commit `3730688830f5c365d211a19f567914b7b5d33bd3` confirmed that the updated credentials and explicit account ID are present and the run reaches symbol resolution. It then fails with:
+A fresh production XAUUSD rerun after the repository secrets were updated confirmed that the GitHub Actions runner receives all required cTrader credentials and the explicit account ID. The run reaches `Fetching XAUUSD M5...` and then fails with:
 
 `cTrader symbol not found: XAU/USD; aliases=none; available_symbols=`
 
-The symbol list returned by the authorized DEMO account is empty, so there is currently no evidence for a broker-specific XAUUSD alias and no trustworthy market-data sample. This is now the active Phase 2 runtime blocker.
+A fresh BTCUSD diagnostic rerun using the same current secrets/account reached account authorization and then produced stronger evidence: the authorized DEMO account returned **zero active symbols and zero archived symbols**. The diagnostic therefore failed before requesting BTCUSD market data. This rules out a simple XAUUSD naming issue in the current evidence set.
 
-The separate BTCUSD diagnostic workflow is integrated on `main` and runs every 15 minutes. Its purpose is to determine whether the empty symbol response is account/market-data provisioning related or specific to XAUUSD. No BTCUSD runtime evidence has yet been accepted in this log; the next scheduled run must provide the actual artifact before drawing conclusions.
+The cTrader Open API documentation confirms that `ProtoOASymbolsListReq` is the account-scoped request for symbols available to a trading account and that `includeArchivedSymbols` controls archived entries. The observed zero/zero response is therefore the active runtime blocker, not an alias-resolution defect.
+
+PR #9 adds a stronger entitlement diagnostic on `main`: before symbol inventory, it queries the accounts granted to the access token, verifies the configured `CTRADER_ACCOUNT_ID` is among them, and verifies that the `ProtoOAAccountAuthRes` ID matches. The next scheduled BTC diagnostic run will provide the first evidence from this stronger check.
 
 Until a non-empty symbol list and non-empty M5/M15/H1/H4 trendbar responses are observed, downstream analytics and timing tolerance must not be treated as operational evidence.
 
 ## Remaining technical debt
 
-1. Obtain a successful BTCUSD diagnostic evidence artifact to distinguish account/market-data provisioning from XAUUSD-specific symbol availability.
-2. Resolve XAUUSD broker symbol availability or explicit alias configuration only from actual cTrader symbol evidence.
-3. Add recorded real-response fixtures after the first successful DEMO smoke run.
-4. Harden historical indexing only when evidence volume justifies it.
-5. Validate observation/outcome lateness empirically from actual scheduled collection cadence.
-6. Add directional/performance analytics only after trustworthy observation-time reference prices exist.
-7. Add refresh-token persistence only if the runtime needs automatic access-token renewal; the current smoke path intentionally uses the provisioned access token.
+1. Run the merged PR #9 entitlement diagnostic and record whether the configured cTID trading-account ID is actually granted to the access token.
+2. If entitlement is confirmed but symbol inventory remains zero, resolve the cTrader broker/account market-data provisioning issue outside Aurum rather than adding symbol aliases or changing Agent02.
+3. Resolve XAUUSD broker symbol availability or explicit alias configuration only from actual cTrader symbol evidence.
+4. Add recorded real-response fixtures after the first successful DEMO smoke run.
+5. Harden historical indexing only when evidence volume justifies it.
+6. Validate observation/outcome lateness empirically from actual scheduled collection cadence.
+7. Add directional/performance analytics only after trustworthy observation-time reference prices exist.
+8. Add refresh-token persistence only if the runtime needs automatic access-token renewal; the current smoke path intentionally uses the provisioned access token.
 
 ## Safety status
 
