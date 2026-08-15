@@ -60,13 +60,13 @@ class TestCTraderProviderConfig(unittest.TestCase):
         match = CTraderProvider._find_symbol("XAU/USD", candidates, aliases=["GOLD"])
         self.assertEqual(match.symbolId, 2)
 
-    def test_default_gold_alias_is_configured_for_xauusd(self):
+    def test_symbol_aliases_are_empty_without_explicit_configuration(self):
         os.environ["CTRADER_CLIENT_ID"] = "id"
         os.environ["CTRADER_CLIENT_SECRET"] = "secret"
         os.environ["CTRADER_ACCESS_TOKEN"] = "token"
 
         provider = CTraderProvider()
-        self.assertEqual(provider.symbol_aliases, ["GOLD"])
+        self.assertEqual(provider.symbol_aliases, [])
 
     def test_custom_symbol_aliases_are_configurable(self):
         os.environ["CTRADER_CLIENT_ID"] = "id"
