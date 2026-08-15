@@ -1,0 +1,53 @@
+name: cTrader BTCUSD diagnostic smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      MARKET_PROVIDER: ctrader
+      CTRADER_ENV: demo
+      CTRADER_SYMBOL: BTC/USD
+      CTRADER_CLIENT_ID: ${{ secrets.CTRADER_CLIENT_ID }}
+      CTRADER_CLIENT_SECRET: ${{ secrets.CTRADER_CLIENT_SECRET }}
+      CTRADER_ACCESS_TOKEN: ${{ secrets.CTRADER_ACCESS_TOKEN }}
+      CTRADER_ACCOUNT_ID: ${{ secrets.CTRADER_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate secret presence
+        shell: bash
+        run: |
+          test -n "$CTRADER_CLIENT_ID" || { echo "CTRADER_CLIENT_ID is missing"; exit 1; }
+          test -n "$CTRADER_CLIENT_SECRET" || { echo "CTRADER_CLIENT_SECRET is missing"; exit 1; }
+          test -n "$CTRADER_ACCESS_TOKEN" || { echo "CTRADER_ACCESS_TOKEN is missing"; exit 1; }
+          echo "cTrader credentials: present"
+          echo "Environment: $CTRADER_ENV"
+          echo "Account ID: ${CTRADER_ACCOUNT_ID:+provided}"
+          echo "Diagnostic symbol: $CTRADER_SYMBOL"
+
+      - name: Run Agent02 smoke fetch
+        run: python -u agent02.py
+
+      - name: Upload Agent02 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctrader-btc-agent02-evidence
+          path: data/current/agent02.json
+          if-no-files-found: warn
