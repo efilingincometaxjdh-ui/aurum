@@ -15,6 +15,7 @@ Optional:
   account granted to the access token is selected.
 - CTRADER_ENV: ``demo`` (default) or ``live``.
 - CTRADER_SYMBOL: target symbol, default ``XAU/USD``.
+- CTRADER_SYMBOL_ALIASES: comma-separated broker-specific symbol aliases.
 - CTRADER_REQUEST_COUNT: bars per timeframe, default 250.
 """
 from __future__ import annotations
@@ -75,6 +76,7 @@ class CTraderProvider:
         self.account_id = account_id or os.environ.get("CTRADER_ACCOUNT_ID")
         self.environment = (environment or os.environ.get("CTRADER_ENV") or "demo").lower()
         self.symbol_name = symbol or os.environ.get("CTRADER_SYMBOL") or "XAU/USD"
+        self.symbol_aliases = self._configured_symbol_aliases()
         self.request_count = int(request_count or os.environ.get("CTRADER_REQUEST_COUNT", "250"))
         self.timeout = int(os.environ.get("CTRADER_REQUEST_TIMEOUT", str(timeout)))
 
@@ -102,9 +104,29 @@ class CTraderProvider:
     def _normalize_symbol(value: str) -> str:
         return "".join(ch for ch in value.upper() if ch.isalnum())
 
+    def _configured_symbol_aliases(self) -> List[str]:
+        raw = os.environ.get("CTRADER_SYMBOL_ALIASES", "")
+        return [item.strip() for item in raw.split(",") if item.strip()]
+
     @classmethod
     def _matches_symbol(cls, configured: str, candidate: str) -> bool:
         return cls._normalize_symbol(configured) == cls._normalize_symbol(candidate)
+
+    @classmethod
+    def _find_symbol(cls, configured: str, candidates, aliases=None):
+        aliases = aliases or []
+        for requested_name in [configured, *aliases]:
+            match = next(
+                (
+                    item
+                    for item in candidates
+                    if cls._matches_symbol(requested_name, getattr(item, "symbolName", ""))
+                ),
+                None,
+            )
+            if match is not None:
+                return match
+        return None
 
     @staticmethod
     def _price_from_relative(relative: int, digits: int) -> float:
@@ -208,12 +230,22 @@ class CTraderProvider:
 
     def _on_symbols(self, response) -> None:
         candidates = list(getattr(response, "symbol", []))
-        match = next(
-            (item for item in candidates if self._matches_symbol(self.symbol_name, getattr(item, "symbolName", ""))),
-            None,
-        )
+        match = self._find_symbol(self.symbol_name, candidates, self.symbol_aliases)
         if match is None:
-            self._fail(RuntimeError(f"cTrader symbol not found: {self.symbol_name}"))
+            available = sorted(
+                getattr(item, "symbolName", "")
+                for item in candidates
+                if getattr(item, "symbolName", "")
+            )
+            preview = ", ".join(available[:30])
+            suffix = " ..." if len(available) > 30 else ""
+            self._fail(
+                RuntimeError(
+                    f"cTrader symbol not found: {self.symbol_name}; "
+                    f"aliases={self.symbol_aliases or 'none'}; "
+                    f"available_symbols={preview}{suffix}"
+                )
+            )
             return
 
         self._symbol_id = int(match.symbolId)

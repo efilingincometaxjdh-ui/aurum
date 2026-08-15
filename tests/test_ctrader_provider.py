@@ -15,6 +15,8 @@ class TestCTraderProviderConfig(unittest.TestCase):
             "CTRADER_ACCESS_TOKEN",
             "CTRADER_ACCOUNT_ID",
             "CTRADER_ENV",
+            "CTRADER_SYMBOL",
+            "CTRADER_SYMBOL_ALIASES",
             "MARKET_PROVIDER",
         ):
             os.environ.pop(key, None)
@@ -49,6 +51,31 @@ class TestCTraderProviderConfig(unittest.TestCase):
         self.assertTrue(CTraderProvider._matches_symbol("XAU/USD", "XAUUSD"))
         self.assertTrue(CTraderProvider._matches_symbol("XAU-USD", "XAU/USD"))
         self.assertFalse(CTraderProvider._matches_symbol("XAU/USD", "XAG/USD"))
+
+    def test_find_symbol_supports_explicit_aliases(self):
+        candidates = [
+            SimpleNamespace(symbolName="EURUSD", symbolId=1),
+            SimpleNamespace(symbolName="GOLD", symbolId=2),
+        ]
+        match = CTraderProvider._find_symbol("XAU/USD", candidates, aliases=["GOLD"])
+        self.assertEqual(match.symbolId, 2)
+
+    def test_symbol_aliases_are_empty_without_explicit_configuration(self):
+        os.environ["CTRADER_CLIENT_ID"] = "id"
+        os.environ["CTRADER_CLIENT_SECRET"] = "secret"
+        os.environ["CTRADER_ACCESS_TOKEN"] = "token"
+
+        provider = CTraderProvider()
+        self.assertEqual(provider.symbol_aliases, [])
+
+    def test_custom_symbol_aliases_are_configurable(self):
+        os.environ["CTRADER_CLIENT_ID"] = "id"
+        os.environ["CTRADER_CLIENT_SECRET"] = "secret"
+        os.environ["CTRADER_ACCESS_TOKEN"] = "token"
+        os.environ["CTRADER_SYMBOL_ALIASES"] = "XAUUSD,GOLD.c"
+
+        provider = CTraderProvider()
+        self.assertEqual(provider.symbol_aliases, ["XAUUSD", "GOLD.c"])
 
     def test_trendbar_normalization_uses_relative_prices_and_utc_minutes(self):
         trendbar = SimpleNamespace(
