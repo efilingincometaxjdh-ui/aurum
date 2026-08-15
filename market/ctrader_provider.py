@@ -106,10 +106,7 @@ class CTraderProvider:
 
     def _configured_symbol_aliases(self) -> List[str]:
         raw = os.environ.get("CTRADER_SYMBOL_ALIASES", "")
-        aliases = [item.strip() for item in raw.split(",") if item.strip()]
-        if not aliases and self._normalize_symbol(self.symbol_name) == "XAUUSD":
-            aliases = ["GOLD"]
-        return aliases
+        return [item.strip() for item in raw.split(",") if item.strip()]
 
     @classmethod
     def _matches_symbol(cls, configured: str, candidate: str) -> bool:
