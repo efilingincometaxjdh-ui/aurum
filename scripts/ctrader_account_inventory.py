@@ -1,9 +1,9 @@
 """Read-only cTrader account/symbol inventory diagnostic.
 
 This diagnostic is intentionally separate from Agent02 production behavior. It
-verifies that the authorized DEMO account exposes symbol inventory and records
-only non-sensitive account/symbol metadata needed to diagnose an empty
-ProtoOASymbolsListRes response.
+verifies that the access token grants the configured DEMO account, that the
+account session is authorized, and that the account exposes symbol inventory.
+Only non-sensitive account/symbol metadata is printed.
 """
 from __future__ import annotations
 
@@ -18,6 +18,15 @@ from ctrader_open_api.messages.OpenApiMessages_pb2 import (
     ProtoOASymbolsListReq,
 )
 from twisted.internet import reactor
+
+
+def authorized_account_ids(response) -> list[int]:
+    """Return the cTrader account IDs explicitly granted to the access token."""
+    return [
+        int(account.ctidTraderAccountId)
+        for account in getattr(response, "ctidTraderAccount", [])
+        if getattr(account, "ctidTraderAccountId", 0)
+    ]
 
 
 class InventoryProbe:
@@ -48,20 +57,30 @@ class InventoryProbe:
         self.send(request, self.on_application_auth)
 
     def on_application_auth(self, _response) -> None:
-        if self.account_id is not None:
-            self.authorize_account()
-            return
         request = ProtoOAGetAccountListByAccessTokenReq()
         request.accessToken = self.access_token
         self.send(request, self.on_account_list)
 
     def on_account_list(self, response) -> None:
-        accounts = list(getattr(response, "ctidTraderAccount", []))
-        if not accounts:
-            self.fail(RuntimeError("access token returned no authorized accounts"))
-            return
-        self.account_id = int(accounts[0].ctidTraderAccountId)
-        print(f"Authorized accounts returned: {len(accounts)}")
+        granted_ids = authorized_account_ids(response)
+        print(f"Access-token authorized account count: {len(granted_ids)}")
+        if self.account_id is None:
+            if not granted_ids:
+                self.fail(RuntimeError("access token returned no authorized accounts"))
+                return
+            self.account_id = granted_ids[0]
+            print(f"Selected authorized account ID: {self.account_id}")
+        else:
+            print(f"Configured account ID supplied: {self.account_id}")
+            if self.account_id not in granted_ids:
+                self.fail(
+                    RuntimeError(
+                        "configured CTRADER_ACCOUNT_ID is not present in the accounts "
+                        "granted to CTRADER_ACCESS_TOKEN"
+                    )
+                )
+                return
+            print("Configured account is explicitly granted to the access token")
         self.authorize_account()
 
     def authorize_account(self) -> None:
@@ -71,7 +90,11 @@ class InventoryProbe:
         self.send(request, self.on_account_auth)
 
     def on_account_auth(self, response) -> None:
-        print(f"Account authorization response received for configured account: {self.account_id is not None}")
+        response_account_id = int(getattr(response, "ctidTraderAccountId", 0))
+        print(f"Account authorization confirmed for ctidTraderAccountId: {response_account_id}")
+        if response_account_id != self.account_id:
+            self.fail(RuntimeError("cTrader account authorization response ID does not match configured account"))
+            return
         self.request_symbols(include_archived=False)
 
     def request_symbols(self, *, include_archived: bool) -> None:
