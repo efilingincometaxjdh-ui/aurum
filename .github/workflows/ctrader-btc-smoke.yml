@@ -41,6 +41,9 @@ jobs:
           echo "Account ID: ${CTRADER_ACCOUNT_ID:+provided}"
           echo "Diagnostic symbol: $CTRADER_SYMBOL"
 
+      - name: Inventory authorized account symbols
+        run: python -u scripts/ctrader_account_inventory.py
+
       - name: Run Agent02 smoke fetch
         run: python -u agent02.py
 
