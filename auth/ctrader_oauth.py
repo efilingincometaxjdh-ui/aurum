@@ -1,13 +1,9 @@
 """cTrader OAuth 2.0 helpers for Aurum.
 
-This module deliberately keeps OAuth state separate from the market-data
-provider. It implements the authorization-code exchange and refresh flow
-without logging or exposing secrets. A web application can use these helpers
-from its /auth/ctrader/callback endpoint.
-
-cTrader requires the exact redirect URI to be registered in the Open API app.
-Access tokens expire after roughly 30 days; refresh tokens are used to obtain
-replacement tokens.
+This module keeps OAuth state separate from the market-data provider. It
+implements authorization-code exchange and refresh without logging or
+exposing secrets. A web application can use these helpers from its
+/auth/ctrader/callback endpoint.
 """
 from __future__ import annotations
 
@@ -15,7 +11,7 @@ import json
 import os
 import secrets
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode
@@ -42,15 +38,14 @@ class OAuthToken:
 
     @property
     def refresh_required(self) -> bool:
-        # Refresh slightly before expiry to avoid races during a live request.
         return time.time() >= self.expires_at - 120
 
 
 class FileTokenStore:
     """Minimal server-side token store for development/single-instance use.
 
-    The file is never intended for Git. Production multi-instance deployments
-    should replace this with a durable encrypted secret store.
+    Production multi-instance deployments should replace this with a durable
+    encrypted secret store. The file is never intended for Git.
     """
 
     def __init__(self, path: Optional[str] = None) -> None:
@@ -98,12 +93,14 @@ class CTraderOAuth:
         self.client_secret = client_secret or os.environ.get("CTRADER_CLIENT_SECRET")
         self.redirect_uri = redirect_uri or os.environ.get("CTRADER_REDIRECT_URI")
         self.token_store = token_store or FileTokenStore()
-        if not self.client_id or not self.client_secret or not self.redirect_uri:
+        if not self.client_id or not self.client_secret:
             raise CTraderOAuthError(
-                "CTRADER_CLIENT_ID, CTRADER_CLIENT_SECRET and CTRADER_REDIRECT_URI are required"
+                "CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET are required"
             )
 
     def authorization_url(self, scope: str = "accounts", state: Optional[str] = None) -> tuple[str, str]:
+        if not self.redirect_uri:
+            raise CTraderOAuthError("CTRADER_REDIRECT_URI is required for OAuth authorization")
         if scope not in {"accounts", "trading"}:
             raise CTraderOAuthError("cTrader OAuth scope must be 'accounts' or 'trading'")
         state_value = state or secrets.token_urlsafe(32)
@@ -117,6 +114,8 @@ class CTraderOAuth:
         return f"{AUTHORIZATION_URL}?{query}", state_value
 
     def exchange_code(self, code: str) -> OAuthToken:
+        if not self.redirect_uri:
+            raise CTraderOAuthError("CTRADER_REDIRECT_URI is required for code exchange")
         if not code:
             raise CTraderOAuthError("authorization code is missing")
         payload = self._token_request({
