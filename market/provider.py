@@ -40,12 +40,21 @@ def _import_ctrader():
     return CTraderProvider
 
 
+def _oauth_access_token() -> Optional[str]:
+    """Load/refresh an OAuth token when no static token is configured."""
+    try:
+        from auth.ctrader_oauth import CTraderOAuth, CTraderOAuthError
+        return CTraderOAuth().get_valid_token().access_token
+    except CTraderOAuthError:
+        return None
+
+
 def get_default_provider() -> IMarketDataProvider:
     """Return the explicitly configured production provider.
 
-    cTrader is the only supported runtime market-data provider. The legacy
-    Twelve Data shim is available only when ``MARKET_PROVIDER=twelve_data`` is
-    explicitly requested by deterministic tests or migration tooling.
+    cTrader is the only supported runtime market-data provider. Its access
+    token may come from the OAuth token store when CTRADER_ACCESS_TOKEN is not
+    set. The legacy Twelve Data shim remains explicit-test-only.
     """
     choice = os.environ.get("MARKET_PROVIDER", "").strip().lower()
 
@@ -54,16 +63,25 @@ def get_default_provider() -> IMarketDataProvider:
 
     ctrader_requested = choice in {"", "ctrader"}
     if ctrader_requested:
-        if not (
-            os.environ.get("CTRADER_CLIENT_ID")
-            and os.environ.get("CTRADER_CLIENT_SECRET")
-            and os.environ.get("CTRADER_ACCESS_TOKEN")
-        ):
+        client_id = os.environ.get("CTRADER_CLIENT_ID")
+        client_secret = os.environ.get("CTRADER_CLIENT_SECRET")
+        if not client_id or not client_secret:
             raise RuntimeError(
-                "cTrader runtime configuration missing: set CTRADER_CLIENT_ID, "
-                "CTRADER_CLIENT_SECRET and CTRADER_ACCESS_TOKEN"
+                "cTrader runtime configuration missing: set CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET"
             )
-        return _import_ctrader()()
+
+        access_token = os.environ.get("CTRADER_ACCESS_TOKEN") or _oauth_access_token()
+        if not access_token:
+            raise RuntimeError(
+                "cTrader runtime authentication missing: provide CTRADER_ACCESS_TOKEN "
+                "or complete the Aurum cTrader OAuth flow"
+            )
+
+        return _import_ctrader()(
+            client_id=client_id,
+            client_secret=client_secret,
+            access_token=access_token,
+        )
 
     raise RuntimeError(
         f"Unsupported MARKET_PROVIDER={choice!r}; use 'ctrader' for runtime or 'twelve_data' only for explicit tests"
