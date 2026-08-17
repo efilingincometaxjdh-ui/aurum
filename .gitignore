@@ -37,3 +37,7 @@ Thumbs.db
 
 # Local data / logs
 *.log
+
+# cTrader OAuth server-side token state
+/data/current/ctrader_oauth.json
+/data/current/ctrader_oauth.json.tmp
