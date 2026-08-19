@@ -26,17 +26,45 @@ Required runtime environment:
 ```text
 CTRADER_CLIENT_ID
 CTRADER_CLIENT_SECRET
-CTRADER_ACCESS_TOKEN
 ```
+
+Authentication can be supplied either by `CTRADER_ACCESS_TOKEN` or by the server-side Aurum cTrader OAuth token store.
 
 Optional:
 
 ```text
-CTRADER_ACCOUNT_ID   # pin a specific authorized account
+CTRADER_ACCESS_TOKEN
+CTRADER_TOKEN_FILE
+CTRADER_REDIRECT_URI
+CTRADER_ACCOUNT_ID   # pin a specific authorized account; always verified against token grants
 CTRADER_ENV          # demo (default) or live
 CTRADER_SYMBOL       # XAU/USD (default)
 CTRADER_REQUEST_COUNT
+CTRADER_OAUTH_SCOPE  # accounts (default) or trading
 ```
+
+### cTrader OAuth
+
+Aurum now includes a server-side OAuth 2.0 implementation in `auth/ctrader_oauth.py` and a minimal callback service in `auth/ctrader_oauth_server.py`.
+
+Start the callback service in a real HTTPS web runtime:
+
+```bash
+CTRADER_CLIENT_ID=... \
+CTRADER_CLIENT_SECRET=... \
+CTRADER_REDIRECT_URI=https://your-host/auth/ctrader/callback \
+python -m auth.ctrader_oauth_server
+```
+
+Then open:
+
+```text
+https://your-host/auth/ctrader/connect
+```
+
+The callback exchanges the authorization code and stores the access/refresh tokens server-side. The token file is ignored by Git and must never be committed. Production multi-instance deployments should replace the file store with a durable encrypted secret store.
+
+The provider factory uses a valid OAuth token automatically when `CTRADER_ACCESS_TOKEN` is not present. A configured `CTRADER_ACCOUNT_ID` is treated only as an account selector and is rejected unless it appears in `ProtoOAGetAccountListByAccessTokenRes` for the current token.
 
 Use the **demo** environment for validation first. cTrader Open API separates demo and live endpoints. Historical bars are requested through the Open API trendbar messages and the Python SDK is maintained by Spotware.
 

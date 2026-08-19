@@ -8,11 +8,11 @@ Historical XAUUSD trendbars are requested through ``ProtoOAGetTrendbarsReq``.
 Required environment:
 - CTRADER_CLIENT_ID
 - CTRADER_CLIENT_SECRET
-- CTRADER_ACCESS_TOKEN
+- CTRADER_ACCESS_TOKEN (or an OAuth token supplied by the provider factory)
 
 Optional:
-- CTRADER_ACCOUNT_ID: pin a specific authorized account; otherwise the first
-  account granted to the access token is selected.
+- CTRADER_ACCOUNT_ID: pin a specific authorized account; it is always verified
+  against the accounts granted to the current access token.
 - CTRADER_ENV: ``demo`` (default) or ``live``.
 - CTRADER_SYMBOL: target symbol, default ``XAU/USD``.
 - CTRADER_SYMBOL_ALIASES: comma-separated broker-specific symbol aliases.
@@ -83,7 +83,7 @@ class CTraderProvider:
         if not self.client_id or not self.client_secret or not self.access_token:
             raise RuntimeError(
                 "cTrader configuration missing: CTRADER_CLIENT_ID, "
-                "CTRADER_CLIENT_SECRET and CTRADER_ACCESS_TOKEN are required"
+                "CTRADER_CLIENT_SECRET and an access token are required"
             )
         if self.environment not in {"demo", "live"}:
             raise RuntimeError("CTRADER_ENV must be 'demo' or 'live'")
@@ -130,13 +130,7 @@ class CTraderProvider:
 
     @staticmethod
     def _price_from_relative(relative: int, digits: int) -> float:
-        """Convert cTrader's fixed 1e-5 relative price to symbol precision.
-
-        cTrader's ProtoOATrendbar relative prices are defined by the Open API
-        as the integer price divided by 100000. Symbol ``digits`` controls the
-        final rounding precision; it does not change the trendbar relative
-        scale.
-        """
+        """Convert cTrader's fixed 1e-5 relative price to symbol precision."""
         if not isinstance(digits, int) or isinstance(digits, bool) or digits < 0:
             raise ValueError("cTrader symbol digits must be a non-negative integer")
         if not isinstance(relative, int) or isinstance(relative, bool):
@@ -201,9 +195,8 @@ class CTraderProvider:
         self._send(request, self._on_application_auth)
 
     def _on_application_auth(self, _response) -> None:
-        if self._account_id is not None:
-            self._authenticate_account()
-            return
+        # Always enumerate the accounts granted to the current access token.
+        # A configured account is only a selector, never an authorization grant.
         request = ProtoOAGetAccountListByAccessTokenReq()
         request.accessToken = self.access_token
         self._send(request, self._on_account_list)
@@ -213,7 +206,19 @@ class CTraderProvider:
         if not accounts:
             self._fail(RuntimeError("cTrader access token has no authorized trading accounts"))
             return
-        self._account_id = int(accounts[0].ctidTraderAccountId)
+
+        authorized_ids = {int(account.ctidTraderAccountId) for account in accounts}
+        if self._account_id is not None:
+            if self._account_id not in authorized_ids:
+                self._fail(
+                    RuntimeError(
+                        "configured CTRADER_ACCOUNT_ID is not authorized by CTRADER_ACCESS_TOKEN"
+                    )
+                )
+                return
+        else:
+            self._account_id = int(accounts[0].ctidTraderAccountId)
+
         self._authenticate_account()
 
     def _authenticate_account(self) -> None:
