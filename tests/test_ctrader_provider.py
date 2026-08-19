@@ -40,12 +40,7 @@ class TestCTraderProviderConfig(unittest.TestCase):
 
     def test_invalid_environment_raises(self):
         with self.assertRaises(RuntimeError):
-            CTraderProvider(
-                client_id="id",
-                client_secret="secret",
-                access_token="token",
-                environment="paper",
-            )
+            CTraderProvider(client_id="id", client_secret="secret", access_token="token", environment="paper")
 
     def test_symbol_matching_ignores_separator_style(self):
         self.assertTrue(CTraderProvider._matches_symbol("XAU/USD", "XAUUSD"))
@@ -53,10 +48,7 @@ class TestCTraderProviderConfig(unittest.TestCase):
         self.assertFalse(CTraderProvider._matches_symbol("XAU/USD", "XAG/USD"))
 
     def test_find_symbol_supports_explicit_aliases(self):
-        candidates = [
-            SimpleNamespace(symbolName="EURUSD", symbolId=1),
-            SimpleNamespace(symbolName="GOLD", symbolId=2),
-        ]
+        candidates = [SimpleNamespace(symbolName="EURUSD", symbolId=1), SimpleNamespace(symbolName="GOLD", symbolId=2)]
         match = CTraderProvider._find_symbol("XAU/USD", candidates, aliases=["GOLD"])
         self.assertEqual(match.symbolId, 2)
 
@@ -64,7 +56,6 @@ class TestCTraderProviderConfig(unittest.TestCase):
         os.environ["CTRADER_CLIENT_ID"] = "id"
         os.environ["CTRADER_CLIENT_SECRET"] = "secret"
         os.environ["CTRADER_ACCESS_TOKEN"] = "token"
-
         provider = CTraderProvider()
         self.assertEqual(provider.symbol_aliases, [])
 
@@ -73,18 +64,11 @@ class TestCTraderProviderConfig(unittest.TestCase):
         os.environ["CTRADER_CLIENT_SECRET"] = "secret"
         os.environ["CTRADER_ACCESS_TOKEN"] = "token"
         os.environ["CTRADER_SYMBOL_ALIASES"] = "XAUUSD,GOLD.c"
-
         provider = CTraderProvider()
         self.assertEqual(provider.symbol_aliases, ["XAUUSD", "GOLD.c"])
 
     def test_trendbar_normalization_uses_relative_prices_and_utc_minutes(self):
-        trendbar = SimpleNamespace(
-            low=200123456,
-            deltaOpen=120000,
-            deltaHigh=340000,
-            deltaClose=180000,
-            utcTimestampInMinutes=29700000,
-        )
+        trendbar = SimpleNamespace(low=200123456, deltaOpen=120000, deltaHigh=340000, deltaClose=180000, utcTimestampInMinutes=29700000)
         normalized = CTraderProvider.normalize_trendbar(trendbar, digits=5)
         self.assertEqual(normalized["low"], 2001.23456)
         self.assertEqual(normalized["open"], 2002.43456)
@@ -93,13 +77,7 @@ class TestCTraderProviderConfig(unittest.TestCase):
         self.assertTrue(normalized["datetime"].endswith("+00:00"))
 
     def test_trendbar_normalization_rounds_to_non_default_symbol_precision(self):
-        trendbar = SimpleNamespace(
-            low=200123456,
-            deltaOpen=120000,
-            deltaHigh=340000,
-            deltaClose=180000,
-            utcTimestampInMinutes=29700000,
-        )
+        trendbar = SimpleNamespace(low=200123456, deltaOpen=120000, deltaHigh=340000, deltaClose=180000, utcTimestampInMinutes=29700000)
         normalized = CTraderProvider.normalize_trendbar(trendbar, digits=2)
         self.assertEqual(normalized["low"], 2001.23)
         self.assertEqual(normalized["open"], 2002.43)
@@ -116,10 +94,27 @@ class TestCTraderProviderConfig(unittest.TestCase):
             CTraderProvider._price_from_relative(200123456.0, 5)
 
     def test_trendbar_missing_required_fields_are_rejected(self):
+        base = dict(low=200123456, deltaOpen=120000, deltaHigh=340000, deltaClose=180000, utcTimestampInMinutes=29700000)
+        for missing in ("low", "deltaOpen", "deltaHigh", "deltaClose", "utcTimestampInMinutes"):
+            payload = dict(base)
+            del payload[missing]
+            with self.subTest(missing=missing):
+                with self.assertRaises(ValueError):
+                    CTraderProvider.normalize_trendbar(SimpleNamespace(**payload), digits=5)
+
+    def test_trendbar_non_integer_required_fields_are_rejected(self):
+        base = dict(low=200123456, deltaOpen=120000, deltaHigh=340000, deltaClose=180000, utcTimestampInMinutes=29700000)
+        for field in base:
+            payload = dict(base)
+            payload[field] = 1.5
+            with self.subTest(field=field):
+                with self.assertRaises(ValueError):
+                    CTraderProvider.normalize_trendbar(SimpleNamespace(**payload), digits=5)
+
+    def test_trendbar_non_positive_low_is_rejected(self):
+        payload = dict(low=0, deltaOpen=0, deltaHigh=0, deltaClose=0, utcTimestampInMinutes=1)
         with self.assertRaises(ValueError):
-            CTraderProvider.normalize_trendbar(SimpleNamespace(utcTimestampInMinutes=1), digits=5)
-        with self.assertRaises(ValueError):
-            CTraderProvider.normalize_trendbar(SimpleNamespace(low=1), digits=5)
+            CTraderProvider.normalize_trendbar(SimpleNamespace(**payload), digits=5)
 
 
 if __name__ == "__main__":
