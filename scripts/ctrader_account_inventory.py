@@ -36,27 +36,34 @@ class InventoryProbe:
         self.access_token = os.environ["CTRADER_ACCESS_TOKEN"]
         account_id = os.environ.get("CTRADER_ACCOUNT_ID")
         self.account_id: Optional[int] = int(account_id) if account_id else None
+        self.timeout = int(os.environ.get("CTRADER_INVENTORY_TIMEOUT", "45"))
+        if self.timeout <= 0:
+            raise RuntimeError("CTRADER_INVENTORY_TIMEOUT must be positive")
         self.client = None
         self.error: Optional[Exception] = None
+        self.phase = "initializing"
 
     def start(self) -> None:
         host = EndPoints.PROTOBUF_DEMO_HOST
         self.client = Client(host, EndPoints.PROTOBUF_PORT, TcpProtocol)
         self.client.setConnectedCallback(self.on_connected)
         self.client.setDisconnectedCallback(self.on_disconnected)
+        self.phase = "connecting"
         self.client.startService()
-        reactor.callLater(20, self.fail, RuntimeError("cTrader inventory probe timed out"))
+        reactor.callLater(self.timeout, self.fail, RuntimeError(f"cTrader inventory probe timed out during {self.phase}"))
         reactor.run()
         if self.error:
             raise self.error
 
     def on_connected(self, _client) -> None:
+        self.phase = "application_auth"
         request = ProtoOAApplicationAuthReq()
         request.clientId = self.client_id
         request.clientSecret = self.client_secret
         self.send(request, self.on_application_auth)
 
     def on_application_auth(self, _response) -> None:
+        self.phase = "account_entitlement"
         request = ProtoOAGetAccountListByAccessTokenReq()
         request.accessToken = self.access_token
         self.send(request, self.on_account_list)
@@ -84,6 +91,7 @@ class InventoryProbe:
         self.authorize_account()
 
     def authorize_account(self) -> None:
+        self.phase = "account_authorization"
         request = ProtoOAAccountAuthReq()
         request.ctidTraderAccountId = self.account_id
         request.accessToken = self.access_token
@@ -98,6 +106,7 @@ class InventoryProbe:
         self.request_symbols(include_archived=False)
 
     def request_symbols(self, *, include_archived: bool) -> None:
+        self.phase = "symbol_inventory_archived" if include_archived else "symbol_inventory_active"
         request = ProtoOASymbolsListReq()
         request.ctidTraderAccountId = self.account_id
         request.includeArchivedSymbols = include_archived
@@ -134,11 +143,11 @@ class InventoryProbe:
         try:
             failure.raiseException()
         except Exception as exc:
-            self.fail(RuntimeError(f"cTrader inventory request failed: {exc}"))
+            self.fail(RuntimeError(f"cTrader inventory request failed during {self.phase}: {exc}"))
 
     def on_disconnected(self, _client, reason) -> None:
         if self.error is None:
-            self.fail(RuntimeError(f"cTrader connection closed before inventory completed: {reason}"))
+            self.fail(RuntimeError(f"cTrader connection closed during {self.phase}: {reason}"))
 
     def fail(self, error: Exception) -> None:
         if self.error is None:
