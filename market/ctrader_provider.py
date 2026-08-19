@@ -8,11 +8,11 @@ Historical XAUUSD trendbars are requested through ``ProtoOAGetTrendbarsReq``.
 Required environment:
 - CTRADER_CLIENT_ID
 - CTRADER_CLIENT_SECRET
-- CTRADER_ACCESS_TOKEN (or an OAuth token supplied by the provider factory)
+- CTRADER_ACCESS_TOKEN
 
 Optional:
-- CTRADER_ACCOUNT_ID: pin a specific authorized account; it is always verified
-  against the accounts granted to the current access token.
+- CTRADER_ACCOUNT_ID: pin a specific authorized account; otherwise the first
+  account granted to the access token is selected.
 - CTRADER_ENV: ``demo`` (default) or ``live``.
 - CTRADER_SYMBOL: target symbol, default ``XAU/USD``.
 - CTRADER_SYMBOL_ALIASES: comma-separated broker-specific symbol aliases.
@@ -58,18 +58,10 @@ class CTraderProvider:
         "1mo": "MN1",
     }
 
-    def __init__(
-        self,
-        *,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
-        access_token: Optional[str] = None,
-        account_id: Optional[str] = None,
-        environment: Optional[str] = None,
-        symbol: Optional[str] = None,
-        request_count: Optional[int] = None,
-        timeout: int = 20,
-    ):
+    def __init__(self, *, client_id: Optional[str] = None, client_secret: Optional[str] = None,
+                 access_token: Optional[str] = None, account_id: Optional[str] = None,
+                 environment: Optional[str] = None, symbol: Optional[str] = None,
+                 request_count: Optional[int] = None, timeout: int = 20):
         self.client_id = client_id or os.environ.get("CTRADER_CLIENT_ID")
         self.client_secret = client_secret or os.environ.get("CTRADER_CLIENT_SECRET")
         self.access_token = access_token or os.environ.get("CTRADER_ACCESS_TOKEN")
@@ -79,17 +71,12 @@ class CTraderProvider:
         self.symbol_aliases = self._configured_symbol_aliases()
         self.request_count = int(request_count or os.environ.get("CTRADER_REQUEST_COUNT", "250"))
         self.timeout = int(os.environ.get("CTRADER_REQUEST_TIMEOUT", str(timeout)))
-
         if not self.client_id or not self.client_secret or not self.access_token:
-            raise RuntimeError(
-                "cTrader configuration missing: CTRADER_CLIENT_ID, "
-                "CTRADER_CLIENT_SECRET and an access token are required"
-            )
+            raise RuntimeError("cTrader configuration missing: CTRADER_CLIENT_ID, CTRADER_CLIENT_SECRET and CTRADER_ACCESS_TOKEN are required")
         if self.environment not in {"demo", "live"}:
             raise RuntimeError("CTRADER_ENV must be 'demo' or 'live'")
         if self.request_count <= 0:
             raise RuntimeError("CTRADER_REQUEST_COUNT must be positive")
-
         self._client = None
         self._account_id: Optional[int] = int(self.account_id) if self.account_id else None
         self._symbol_id: Optional[int] = None
@@ -116,14 +103,7 @@ class CTraderProvider:
     def _find_symbol(cls, configured: str, candidates, aliases=None):
         aliases = aliases or []
         for requested_name in [configured, *aliases]:
-            match = next(
-                (
-                    item
-                    for item in candidates
-                    if cls._matches_symbol(requested_name, getattr(item, "symbolName", ""))
-                ),
-                None,
-            )
+            match = next((item for item in candidates if cls._matches_symbol(requested_name, getattr(item, "symbolName", ""))), None)
             if match is not None:
                 return match
         return None
@@ -139,29 +119,25 @@ class CTraderProvider:
 
     @classmethod
     def normalize_trendbar(cls, trendbar, digits: int) -> Dict:
-        if not hasattr(trendbar, "low") or not trendbar.low:
-            raise ValueError("cTrader trendbar missing low price")
-        if not hasattr(trendbar, "utcTimestampInMinutes"):
-            raise ValueError("cTrader trendbar missing utcTimestampInMinutes")
-
-        low_relative = int(trendbar.low)
-        open_relative = low_relative + int(getattr(trendbar, "deltaOpen", 0))
-        high_relative = low_relative + int(getattr(trendbar, "deltaHigh", 0))
-        close_relative = low_relative + int(getattr(trendbar, "deltaClose", 0))
-
-        timestamp = int(trendbar.utcTimestampInMinutes) * 60
+        """Normalize one trendbar; incomplete or malformed bars fail closed."""
+        required = ("low", "deltaOpen", "deltaHigh", "deltaClose", "utcTimestampInMinutes")
+        missing = [name for name in required if not hasattr(trendbar, name)]
+        if missing:
+            raise ValueError("cTrader trendbar missing required field(s): " + ", ".join(missing))
+        values = {name: getattr(trendbar, name) for name in required}
+        if any(isinstance(value, bool) or not isinstance(value, int) for value in values.values()):
+            raise ValueError("cTrader trendbar price and timestamp fields must be integers")
+        if values["low"] <= 0:
+            raise ValueError("cTrader trendbar low price must be positive")
+        low_relative = values["low"]
+        open_relative = low_relative + values["deltaOpen"]
+        high_relative = low_relative + values["deltaHigh"]
+        close_relative = low_relative + values["deltaClose"]
+        timestamp = values["utcTimestampInMinutes"] * 60
         dt = _dt.datetime.fromtimestamp(timestamp, tz=_dt.timezone.utc).isoformat()
-
-        return {
-            "open": cls._price_from_relative(open_relative, digits),
-            "high": cls._price_from_relative(high_relative, digits),
-            "low": cls._price_from_relative(low_relative, digits),
-            "close": cls._price_from_relative(close_relative, digits),
-            "datetime": dt,
-        }
+        return {"open": cls._price_from_relative(open_relative, digits), "high": cls._price_from_relative(high_relative, digits), "low": cls._price_from_relative(low_relative, digits), "close": cls._price_from_relative(close_relative, digits), "datetime": dt}
 
     def fetch_candles(self, label: str, interval: str, count: int = 250) -> List[Dict]:
-        """Return normalized historical candles for one timeframe."""
         if interval not in self.INTERVAL_TO_PERIOD:
             raise ValueError(f"Unsupported cTrader interval: {interval}")
         self._ensure_loaded()
@@ -172,17 +148,14 @@ class CTraderProvider:
             return
         if reactor.running:
             raise RuntimeError("cTrader provider cannot start its private reactor while another reactor is running")
-
         self._timeframes = ["5min", "15min", "1h", "4h"]
         host = EndPoints.PROTOBUF_LIVE_HOST if self.environment == "live" else EndPoints.PROTOBUF_DEMO_HOST
         self._client = Client(host, EndPoints.PROTOBUF_PORT, TcpProtocol)
         self._client.setConnectedCallback(self._on_connected)
         self._client.setDisconnectedCallback(self._on_disconnected)
         self._client.startService()
-
         reactor.callLater(self.timeout, self._fail, RuntimeError("cTrader connection timed out"))
         reactor.run()
-
         if self._error:
             raise self._error
         if not self._loaded:
@@ -195,8 +168,6 @@ class CTraderProvider:
         self._send(request, self._on_application_auth)
 
     def _on_application_auth(self, _response) -> None:
-        # Always enumerate the accounts granted to the current access token.
-        # A configured account is only a selector, never an authorization grant.
         request = ProtoOAGetAccountListByAccessTokenReq()
         request.accessToken = self.access_token
         self._send(request, self._on_account_list)
@@ -206,19 +177,13 @@ class CTraderProvider:
         if not accounts:
             self._fail(RuntimeError("cTrader access token has no authorized trading accounts"))
             return
-
         authorized_ids = {int(account.ctidTraderAccountId) for account in accounts}
         if self._account_id is not None:
             if self._account_id not in authorized_ids:
-                self._fail(
-                    RuntimeError(
-                        "configured CTRADER_ACCOUNT_ID is not authorized by CTRADER_ACCESS_TOKEN"
-                    )
-                )
+                self._fail(RuntimeError("configured CTRADER_ACCOUNT_ID is not authorized by CTRADER_ACCESS_TOKEN"))
                 return
         else:
             self._account_id = int(accounts[0].ctidTraderAccountId)
-
         self._authenticate_account()
 
     def _authenticate_account(self) -> None:
@@ -237,22 +202,11 @@ class CTraderProvider:
         candidates = list(getattr(response, "symbol", []))
         match = self._find_symbol(self.symbol_name, candidates, self.symbol_aliases)
         if match is None:
-            available = sorted(
-                getattr(item, "symbolName", "")
-                for item in candidates
-                if getattr(item, "symbolName", "")
-            )
+            available = sorted(getattr(item, "symbolName", "") for item in candidates if getattr(item, "symbolName", ""))
             preview = ", ".join(available[:30])
             suffix = " ..." if len(available) > 30 else ""
-            self._fail(
-                RuntimeError(
-                    f"cTrader symbol not found: {self.symbol_name}; "
-                    f"aliases={self.symbol_aliases or 'none'}; "
-                    f"available_symbols={preview}{suffix}"
-                )
-            )
+            self._fail(RuntimeError(f"cTrader symbol not found: {self.symbol_name}; aliases={self.symbol_aliases or 'none'}; available_symbols={preview}{suffix}"))
             return
-
         self._symbol_id = int(match.symbolId)
         detail = ProtoOASymbolByIdReq()
         detail.ctidTraderAccountId = self._account_id
@@ -271,20 +225,12 @@ class CTraderProvider:
             self._loaded = True
             self._stop_reactor()
             return
-
         interval = self._timeframes[self._index]
-        period_name = self.INTERVAL_TO_PERIOD[interval]
-        period = ProtoOATrendbarPeriod.Value(period_name)
+        period = ProtoOATrendbarPeriod.Value(self.INTERVAL_TO_PERIOD[interval])
         now = _dt.datetime.now(tz=_dt.timezone.utc)
-        lookback_minutes = {
-            "5min": self.request_count * 5 * 2,
-            "15min": self.request_count * 15 * 2,
-            "1h": self.request_count * 60 * 2,
-            "4h": self.request_count * 240 * 2,
-        }[interval]
+        lookback_minutes = {"5min": self.request_count * 5 * 2, "15min": self.request_count * 15 * 2, "1h": self.request_count * 60 * 2, "4h": self.request_count * 240 * 2}[interval]
         from_ts = calendar.timegm((now - _dt.timedelta(minutes=lookback_minutes)).utctimetuple()) * 1000
         to_ts = calendar.timegm(now.utctimetuple()) * 1000
-
         request = ProtoOAGetTrendbarsReq()
         request.ctidTraderAccountId = self._account_id
         request.period = period
