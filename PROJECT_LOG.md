@@ -1,6 +1,6 @@
 # Rahul AI Team — Project Log
 
-Last audited: 2026-08-15
+Last audited: 2026-08-20
 Branch: `main`
 Phase: **Phase 2 — live observation infrastructure**
 
@@ -44,10 +44,11 @@ Agent 01 remains isolated legacy code. Keltner Bot 2.0 is a separate project.
 - GitLab CI added as a duplicate deterministic test runner for push/merge-request validation.
 - cTrader trendbar normalization hardened: the Open API fixed 1e-5 relative scale is explicit, broker symbol digits control final rounding, and deterministic tests cover 5-digit, non-default precision, timestamp, and invalid-input behavior. Merged to `main` on 2026-08-15 after exact-head GitHub Actions test success.
 - Read-only cTrader DEMO evidence smoke workflow scheduled every 15 minutes and retained as manually dispatchable.
-- cTrader demo authorization/account provisioning was updated externally; the latest smoke run now reaches broker-symbol resolution with the explicit account selected.
+- cTrader demo authorization/account provisioning was updated externally; smoke execution reaches broker-symbol resolution with the explicit account selected.
 - PR #7: separate read-only BTCUSD cTrader diagnostic smoke workflow merged to `main` on 2026-08-15 after exact-head deterministic CI success. It does not change Agent02's production XAU/USD path and does not enable trading.
 - PR #8: read-only cTrader account/symbol inventory diagnostic merged to `main` on 2026-08-15 after exact-head deterministic CI success.
 - PR #9: read-only cTrader token-account entitlement diagnostic merged to `main` on 2026-08-15 after exact-head deterministic CI success. It verifies that an explicitly configured account is actually granted to the access token and that the account authorization response matches the configured cTID trading-account ID before symbol inventory is evaluated.
+- PR #12: cTrader trendbar normalization fail-closed hardening merged to `main` on 2026-08-19. Incomplete/malformed trendbars now fail closed instead of synthesizing partial candles.
 
 ## Agent 02 runtime provider
 
@@ -104,30 +105,27 @@ Required evidence:
 5. Successful `data/current/agent02.json` generation.
 6. Repeated observations sufficient to derive empirical freshness/timing tolerance.
 
-### Current runtime state — 2026-08-15
+### Current runtime state — 2026-08-20
 
-A fresh production XAUUSD rerun after the repository secrets were updated confirmed that the GitHub Actions runner receives all required cTrader credentials and the explicit account ID. The run reaches `Fetching XAUUSD M5...` and then fails with:
+The canonical `main` head is `d011d4983bf7678d1e1b40d52d5036d6576b78a5`, which merged PR #12 on 2026-08-19 and includes the fail-closed cTrader trendbar normalization hardening.
 
-`cTrader symbol not found: XAU/USD; aliases=none; available_symbols=`
+The latest observed production XAUUSD smoke evidence available to this audit still reaches `Fetching XAUUSD M5...` and fails with `cTrader symbol not found: XAU/USD; aliases=none; available_symbols=`. That run proves credentials are present and the explicit account ID is supplied, but it does not prove a non-empty symbol inventory.
 
-A fresh BTCUSD diagnostic rerun using the same current secrets/account reached account authorization and then produced stronger evidence: the authorized DEMO account returned **zero active symbols and zero archived symbols**. The diagnostic therefore failed before requesting BTCUSD market data. This rules out a simple XAUUSD naming issue in the current evidence set.
+The strongest prior BTC diagnostic evidence reported zero active and zero archived symbols for the authorized DEMO account. The merged entitlement diagnostic is the required deterministic path for establishing whether the current access token actually grants the configured account before symbol inventory is interpreted.
 
-The cTrader Open API documentation confirms that `ProtoOASymbolsListReq` is the account-scoped request for symbols available to a trading account and that `includeArchivedSymbols` controls archived entries. The observed zero/zero response is therefore the active runtime blocker, not an alias-resolution defect.
-
-PR #9 adds a stronger entitlement diagnostic on `main`: before symbol inventory, it queries the accounts granted to the access token, verifies the configured `CTRADER_ACCOUNT_ID` is among them, and verifies that the `ProtoOAAccountAuthRes` ID matches. The next scheduled BTC diagnostic run will provide the first evidence from this stronger check.
-
-Until a non-empty symbol list and non-empty M5/M15/H1/H4 trendbar responses are observed, downstream analytics and timing tolerance must not be treated as operational evidence.
+No live market observation is considered operational until authorized-account evidence, non-empty broker symbol inventory, and non-empty M5/M15/H1/H4 trendbar responses are captured from the same runtime path. Do not infer broker symbol names or provisioning from account balance fields or from the existence of a demo account alone.
 
 ## Remaining technical debt
 
-1. Run the merged PR #9 entitlement diagnostic and record whether the configured cTID trading-account ID is actually granted to the access token.
+1. Execute and record the current merged cTrader entitlement diagnostic against the latest GitHub secret state.
 2. If entitlement is confirmed but symbol inventory remains zero, resolve the cTrader broker/account market-data provisioning issue outside Aurum rather than adding symbol aliases or changing Agent02.
 3. Resolve XAUUSD broker symbol availability or explicit alias configuration only from actual cTrader symbol evidence.
 4. Add recorded real-response fixtures after the first successful DEMO smoke run.
-5. Harden historical indexing only when evidence volume justifies it.
-6. Validate observation/outcome lateness empirically from actual scheduled collection cadence.
-7. Add directional/performance analytics only after trustworthy observation-time reference prices exist.
-8. Add refresh-token persistence only if the runtime needs automatic access-token renewal; the current smoke path intentionally uses the provisioned access token.
+5. Build and test append-only historical observation records.
+6. Validate durable cross-run retention.
+7. Validate observation/outcome lateness empirically from actual scheduled collection cadence.
+8. Add directional/performance analytics only after trustworthy observation-time reference prices exist.
+9. Add refresh-token persistence only if the runtime needs automatic access-token renewal; the current smoke path intentionally uses the provisioned access token.
 
 ## Safety status
 
