@@ -65,7 +65,7 @@ namespace cAlgo.Robots
                 High = Bars.HighPrices[index],
                 Low = Bars.LowPrices[index],
                 Close = Bars.ClosePrices[index],
-                TickVolume = Bars.TickVolumes[index],
+                TickVolume = (long)Bars.TickVolumes[index],
                 Digits = Symbol.Digits
             };
 
