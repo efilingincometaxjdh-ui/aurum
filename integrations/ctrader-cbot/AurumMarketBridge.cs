@@ -17,11 +17,9 @@ namespace cAlgo.Robots
         [Parameter("Poll Seconds", DefaultValue = 5, MinValue = 1)]
         public int PollSeconds { get; set; }
 
-        [Parameter("Historical Bars", DefaultValue = 250, MinValue = 50, MaxValue = 2000)]
-        public int HistoricalBars { get; set; }
-
         private DateTime _lastSentOpenTime = DateTime.MinValue;
         private bool _initialised;
+        private bool _requestInFlight;
 
         protected override void OnStart()
         {
@@ -47,11 +45,8 @@ namespace cAlgo.Robots
         private void SendLatestClosedBar()
         {
             // The last index is the currently forming bar. Only transmit completed bars.
-            if (Bars.Count < 3)
-            {
-                Print("Waiting for sufficient bars. Count={0}", Bars.Count);
+            if (_requestInFlight || Bars.Count < 3)
                 return;
-            }
 
             var index = Bars.Count - 2;
             var openTime = Bars.OpenTimes[index];
@@ -83,8 +78,11 @@ namespace cAlgo.Robots
             if (!string.IsNullOrWhiteSpace(IngestToken))
                 request.Headers.Add("X-Aurum-Ingest-Token", IngestToken);
 
+            _requestInFlight = true;
             Http.SendAsync(request, response =>
             {
+                _requestInFlight = false;
+
                 if (response.IsSuccessful)
                 {
                     _lastSentOpenTime = openTime;
